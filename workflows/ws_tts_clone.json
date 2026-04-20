@@ -1,0 +1,45 @@
+{
+  "1": {
+    "_meta": {"title": "Qwen3-TTS Base (VoiceClone 전용)"},
+    "class_type": "FL_Qwen3TTS_ModelLoader",
+    "inputs": {
+      "model_variant": "Qwen3-TTS-12Hz-1.7B-Base",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention": "sdpa",
+      "force_reload": false
+    }
+  },
+  "2": {
+    "_meta": {"title": "레퍼런스 보이스 로드"},
+    "class_type": "LoadAudio",
+    "inputs": {
+      "audio": "reference.wav"
+    }
+  },
+  "3": {
+    "_meta": {"title": "Voice Clone 합성"},
+    "class_type": "FL_Qwen3TTS_VoiceClone",
+    "inputs": {
+      "model": ["1", 0],
+      "text": "안녕하세요.",
+      "ref_audio": ["2", 0],
+      "language": "Korean",
+      "x_vector_only_mode": true,
+      "top_k": 50,
+      "top_p": 1.0,
+      "temperature": 0.9,
+      "repetition_penalty": 1.05,
+      "max_new_tokens": 2048,
+      "seed": -1
+    }
+  },
+  "4": {
+    "_meta": {"title": "음성 저장"},
+    "class_type": "SaveAudio",
+    "inputs": {
+      "audio": ["3", 0],
+      "filename_prefix": "myaniform/voice"
+    }
+  }
+}

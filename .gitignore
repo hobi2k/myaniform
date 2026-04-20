@@ -205,3 +205,36 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ─── myaniform ─────────────────────────────────────────────
+# 프론트엔드 빌드/모듈
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ComfyUI 로컬 상태 (코드는 커밋, 상태·모델·출력은 무시)
+ComfyUI/models/**/*.safetensors
+ComfyUI/models/**/*.bin
+ComfyUI/models/**/*.pth
+ComfyUI/models/**/*.ckpt
+ComfyUI/models/**/*.gguf
+ComfyUI/models/**/*.onnx
+ComfyUI/models/**/*.pt
+ComfyUI/output/
+ComfyUI/input/
+ComfyUI/temp/
+ComfyUI/user/
+ComfyUI/web/extensions/
+
+# 백엔드 런타임 데이터
+backend/*.db
+backend/*.sqlite*
+uploads/
+voices/*.wav
+output/*.mp4
+output/*.webm
+
+# 시크릿
+.civitai_token
+.hf_token
+.env

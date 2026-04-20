@@ -1,0 +1,70 @@
+{
+  "_meta": {
+    "title": "캐릭터 시트 생성 (SDXL 간이 버전)",
+    "description": "API 포맷. 본격 VNCCS 파이프라인은 vnccs_step1_sheet_ui.json (ComfyUI 뷰어에서 실행). 이 파일은 단일-정면 시트를 SDXL 로 빠르게 생성하기 위한 간이 백업."
+  },
+  "1": {
+    "_meta": {"title": "SDXL Checkpoint"},
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {"ckpt_name": "waiIllustriousSDXL_v160.safetensors"}
+  },
+  "2": {
+    "_meta": {"title": "Character Sheet LoRA"},
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "vn_character_sheet_v4.safetensors",
+      "strength_model": 0.9,
+      "strength_clip": 1.0
+    }
+  },
+  "10": {
+    "_meta": {"title": "Positive (Character Description)"},
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "masterpiece, best quality, character sheet, turnaround, front view, side view, back view, full body, 1girl, anime style, simple white background, character reference sheet, highly detailed"
+    }
+  },
+  "11": {
+    "_meta": {"title": "Negative"},
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "embedding:EasyNegative, embedding:badhandv4, worst quality, low quality, lowres, blurry, deformed, text, watermark"
+    }
+  },
+  "20": {
+    "_meta": {"title": "Empty Latent (wide for sheet)"},
+    "class_type": "EmptyLatentImage",
+    "inputs": {"width": 1536, "height": 1024, "batch_size": 1}
+  },
+  "30": {
+    "_meta": {"title": "KSampler"},
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["2", 0],
+      "positive": ["10", 0],
+      "negative": ["11", 0],
+      "latent_image": ["20", 0],
+      "seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 30,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "sgm_uniform",
+      "denoise": 1.0
+    }
+  },
+  "40": {
+    "_meta": {"title": "VAE Decode"},
+    "class_type": "VAEDecode",
+    "inputs": {"samples": ["30", 0], "vae": ["1", 2]}
+  },
+  "70": {
+    "_meta": {"title": "Save Character Sheet"},
+    "class_type": "SaveImage",
+    "inputs": {"images": ["40", 0], "filename_prefix": "myaniform/char_sheet"}
+  }
+}

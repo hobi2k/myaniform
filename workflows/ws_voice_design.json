@@ -1,0 +1,37 @@
+{
+  "1": {
+    "_meta": {"title": "Qwen3-TTS Model (VoiceDesign)"},
+    "class_type": "FL_Qwen3TTS_ModelLoader",
+    "inputs": {
+      "model_variant": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention": "sdpa",
+      "force_reload": false
+    }
+  },
+  "2": {
+    "_meta": {"title": "Voice Design 생성"},
+    "class_type": "FL_Qwen3TTS_VoiceDesign",
+    "inputs": {
+      "model": ["1", 0],
+      "text": "안녕하세요.",
+      "voice_description": "A warm, gentle young female voice, calm pace, anime style.",
+      "language": "Korean",
+      "top_k": 50,
+      "top_p": 1.0,
+      "temperature": 0.9,
+      "repetition_penalty": 1.05,
+      "max_new_tokens": 2048,
+      "seed": -1
+    }
+  },
+  "3": {
+    "_meta": {"title": "음성 저장"},
+    "class_type": "SaveAudio",
+    "inputs": {
+      "audio": ["2", 0],
+      "filename_prefix": "myaniform/voice"
+    }
+  }
+}

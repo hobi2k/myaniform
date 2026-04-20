@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-surface text-gray-100 font-sans antialiased;
+    background-image:
+      radial-gradient(1200px 600px at 10% -10%, rgba(255, 122, 144, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, rgba(122, 162, 255, 0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-overlay rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+  /* 폼 요소 포커스 톤 맞춤 */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    @apply border-accent/60 ring-1 ring-accent/30;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface-raised border border-white/5 rounded-xl shadow-card;
+  }
+  .card-hover {
+    @apply hover:border-accent/40 hover:shadow-card-hover transition-all;
+  }
+  .input-base {
+    @apply bg-surface border border-white/10 rounded-lg px-3 py-2 text-xs
+           focus:outline-none transition-colors placeholder:text-gray-600;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded;
+  }
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.12) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+}
