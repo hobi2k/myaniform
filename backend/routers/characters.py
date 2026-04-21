@@ -1,8 +1,11 @@
+import asyncio
+import json
+import logging
 import shutil
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -16,6 +19,16 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 VOICES_DIR.mkdir(exist_ok=True)
 
 router = APIRouter(prefix="/projects/{project_id}/characters", tags=["characters"])
+logger = logging.getLogger("myaniform.characters")
+
+
+def _parse_json(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
 
 
 def _get_char(project_id: str, char_id: str, session: Session) -> Character:
@@ -23,6 +36,130 @@ def _get_char(project_id: str, char_id: str, session: Session) -> Character:
     if not c or c.project_id != project_id:
         raise HTTPException(404, "캐릭터를 찾을 수 없습니다.")
     return c
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _character_event(
+    stage: str,
+    message: str,
+    *,
+    progress_pct: int | None = None,
+    node: str | None = None,
+    prompt_id: str | None = None,
+) -> dict:
+    payload = {
+        "type": "status",
+        "stage": stage,
+        "message": message,
+    }
+    if progress_pct is not None:
+        payload["progress_pct"] = progress_pct
+    if node:
+        payload["node"] = node
+    if prompt_id:
+        payload["prompt_id"] = prompt_id
+    return payload
+
+
+async def _run_character_workflow_stream(
+    *,
+    char: Character,
+    workflow: dict,
+    kind: str,
+    success_message: str,
+    persist,
+    session: Session,
+):
+    async def stream():
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        logger.info("[%s] %s 시작", char.id, success_message)
+        await queue.put(_sse(_character_event("preparing", "워크플로우 준비 중...", progress_pct=2)))
+
+        async def worker():
+            try:
+                async def on_event(event: dict):
+                    etype = event.get("type")
+                    prompt_id = event.get("prompt_id")
+                    node = event.get("node")
+                    if etype == "queued":
+                        logger.info("[%s] queued prompt_id=%s kind=%s", char.id, prompt_id, kind)
+                        payload = _character_event(
+                            "queued",
+                            f"작업이 큐에 등록됐습니다. prompt_id={prompt_id}",
+                            progress_pct=5,
+                            prompt_id=prompt_id,
+                        )
+                    elif etype == "executing":
+                        message = f"노드 실행 중: {node}" if node else "실행 중..."
+                        logger.info("[%s] executing node=%s", char.id, node)
+                        payload = _character_event(
+                            "running",
+                            message,
+                            progress_pct=10,
+                            node=node,
+                            prompt_id=prompt_id,
+                        )
+                    elif etype == "progress":
+                        pct = event.get("progress_pct")
+                        value = event.get("value")
+                        total = event.get("max")
+                        message = f"생성 중... {value}/{total}"
+                        if node:
+                            message += f" · node {node}"
+                        logger.info("[%s] progress %s/%s node=%s", char.id, value, total, node)
+                        payload = _character_event(
+                            "running",
+                            message,
+                            progress_pct=pct if isinstance(pct, int) else None,
+                            node=node,
+                            prompt_id=prompt_id,
+                        )
+                    elif etype == "output_ready":
+                        logger.info("[%s] output ready path=%s", char.id, event.get("path"))
+                        payload = _character_event("saving", "출력 파일 저장 중...", progress_pct=96)
+                    elif etype == "freed":
+                        logger.info("[%s] memory freed", char.id)
+                        payload = _character_event("saving", "메모리 정리 중...", progress_pct=99)
+                    else:
+                        return
+                    await queue.put(_sse(payload))
+
+                output = await run_workflow(workflow, kind=kind, on_event=on_event)
+                updated = persist(output)
+                session.add(updated)
+                session.commit()
+                session.refresh(updated)
+                logger.info("[%s] %s 완료", char.id, success_message)
+                await queue.put(_sse(_character_event("complete", success_message, progress_pct=100)))
+                await queue.put(
+                    _sse(
+                        {
+                            "type": "complete",
+                            "character": CharacterRead.model_validate(updated).model_dump(mode="json"),
+                        }
+                    )
+                )
+            except Exception as exc:
+                logger.exception("[%s] %s 실패: %s", char.id, success_message, exc)
+                await queue.put(_sse({"type": "error", "message": str(exc)}))
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @router.get("", response_model=list[CharacterRead])
@@ -107,7 +244,12 @@ async def generate_image(
     if not char.description:
         raise HTTPException(400, "description이 없습니다. 캐릭터 설명을 먼저 입력하세요.")
 
-    wf = patch_char_generate(char.description)
+    wf = patch_char_generate(
+        char.description,
+        negative_prompt=char.negative_prompt,
+        resolution=(char.resolution_w, char.resolution_h),
+        params=_parse_json(char.image_params),
+    )
     output = await run_workflow(wf)
 
     dest = UPLOAD_DIR / f"{char_id}_generated.png"
@@ -117,6 +259,39 @@ async def generate_image(
     session.commit()
     session.refresh(char)
     return char
+
+
+@router.post("/{char_id}/image/generate/stream")
+async def generate_image_stream(
+    project_id: str,
+    char_id: str,
+    session: Session = Depends(get_session),
+):
+    char = _get_char(project_id, char_id, session)
+    if not char.description:
+        raise HTTPException(400, "description이 없습니다. 캐릭터 설명을 먼저 입력하세요.")
+
+    wf = patch_char_generate(
+        char.description,
+        negative_prompt=char.negative_prompt,
+        resolution=(char.resolution_w, char.resolution_h),
+        params=_parse_json(char.image_params),
+    )
+
+    def persist(output: Path) -> Character:
+        dest = UPLOAD_DIR / f"{char_id}_generated.png"
+        shutil.copy(output, dest)
+        char.image_path = str(dest)
+        return char
+
+    return await _run_character_workflow_stream(
+        char=char,
+        workflow=wf,
+        kind="image",
+        success_message="캐릭터 이미지 생성 완료",
+        persist=persist,
+        session=session,
+    )
 
 
 # ── Phase 4: VNCCS 캐릭터 시트 / 스프라이트 ──────────────────────────────
@@ -135,7 +310,13 @@ async def generate_sheet(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다.")
-    wf = patch_character_sheet(char.name, char.description)
+    wf = patch_character_sheet(
+        char.name,
+        char.description,
+        negative_prompt=char.negative_prompt,
+        resolution=(char.resolution_w, char.resolution_h),
+        params=_parse_json(char.image_params),
+    )
     output = await run_workflow(wf)
     dest = UPLOAD_DIR / f"{char_id}_sheet.png"
     shutil.copy(output, dest)
@@ -144,6 +325,39 @@ async def generate_sheet(
     session.commit()
     session.refresh(char)
     return char
+
+
+@router.post("/{char_id}/sheet/generate/stream")
+async def generate_sheet_stream(
+    project_id: str,
+    char_id: str,
+    session: Session = Depends(get_session),
+):
+    char = _get_char(project_id, char_id, session)
+    if not char.description:
+        raise HTTPException(400, "description이 없습니다.")
+    wf = patch_character_sheet(
+        char.name,
+        char.description,
+        negative_prompt=char.negative_prompt,
+        resolution=(char.resolution_w, char.resolution_h),
+        params=_parse_json(char.image_params),
+    )
+
+    def persist(output: Path) -> Character:
+        dest = UPLOAD_DIR / f"{char_id}_sheet.png"
+        shutil.copy(output, dest)
+        char.sheet_path = str(dest)
+        return char
+
+    return await _run_character_workflow_stream(
+        char=char,
+        workflow=wf,
+        kind="image",
+        success_message="캐릭터 시트 생성 완료",
+        persist=persist,
+        session=session,
+    )
 
 
 @router.post("/{char_id}/sheet/upload", response_model=CharacterRead)
@@ -226,7 +440,12 @@ async def design_voice(
     if not voice_design:
         raise HTTPException(400, "voice_design 텍스트를 입력하세요.")
 
-    wf = patch_voice_design(voice_design)
+    wf = patch_voice_design(
+        voice_design,
+        sample_text=char.voice_sample_text or "안녕하세요.",
+        language=char.voice_language or "Korean",
+        params=_parse_json(char.voice_params),
+    )
     output = await run_workflow(wf)
 
     dest = VOICES_DIR / f"{char_id}.wav"
@@ -238,3 +457,39 @@ async def design_voice(
     session.commit()
     session.refresh(char)
     return char
+
+
+@router.post("/{char_id}/voice/design/stream")
+async def design_voice_stream(
+    project_id: str,
+    char_id: str,
+    body: dict,
+    session: Session = Depends(get_session),
+):
+    char = _get_char(project_id, char_id, session)
+    voice_design = body.get("voice_design", "")
+    if not voice_design:
+        raise HTTPException(400, "voice_design 텍스트를 입력하세요.")
+
+    wf = patch_voice_design(
+        voice_design,
+        sample_text=char.voice_sample_text or "안녕하세요.",
+        language=char.voice_language or "Korean",
+        params=_parse_json(char.voice_params),
+    )
+
+    def persist(output: Path) -> Character:
+        dest = VOICES_DIR / f"{char_id}.wav"
+        shutil.copy(output, dest)
+        char.voice_design = voice_design
+        char.voice_sample_path = str(dest)
+        return char
+
+    return await _run_character_workflow_stream(
+        char=char,
+        workflow=wf,
+        kind="audio",
+        success_message="보이스 디자인 생성 완료",
+        persist=persist,
+        session=session,
+    )

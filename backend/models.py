@@ -59,6 +59,10 @@ class Character(SQLModel, table=True):
     project_id:   str = Field(foreign_key="project.id")
     name:         str
     description:  Optional[str] = None   # 텍스트 설명 (이미지 생성용)
+    negative_prompt: Optional[str] = None
+    resolution_w: Optional[int] = None
+    resolution_h: Optional[int] = None
+    image_params: Optional[str] = None   # JSON ImageParams
 
     # 이미지 (단일 레퍼런스)
     image_path:   Optional[str] = None   # 업로드 or 생성된 이미지 경로
@@ -69,6 +73,9 @@ class Character(SQLModel, table=True):
     # 목소리
     voice_design:      Optional[str] = None  # Voice Design 텍스트 설명
     voice_sample_path: Optional[str] = None  # 생성/업로드된 WAV
+    voice_sample_text: Optional[str] = None
+    voice_language: Optional[str] = None
+    voice_params: Optional[str] = None       # JSON VoiceGenParams
     tts_engine:        TTSEngine = TTSEngine.qwen3
 
 
@@ -81,11 +88,18 @@ class CharacterRead(SQLModel):
     project_id:        str
     name:              str
     description:       Optional[str]
+    negative_prompt:   Optional[str]
+    resolution_w:      Optional[int]
+    resolution_h:      Optional[int]
+    image_params:      Optional[str]
     image_path:        Optional[str]
     sheet_path:        Optional[str]
     sprite_path:       Optional[str]
     voice_design:      Optional[str]
     voice_sample_path: Optional[str]
+    voice_sample_text: Optional[str]
+    voice_language:    Optional[str]
+    voice_params:      Optional[str]
     tts_engine:        TTSEngine
 
 

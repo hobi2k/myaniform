@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 // scene.type → 워크플로우 매핑 (backend/routers/workflows.py 와 동기)
@@ -35,34 +35,19 @@ export default function WorkflowViewerPage() {
   }, [params]);
 
   const [current, setCurrent] = useState(initial);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const iframeReadyRef = useRef(false);
-
-  // iframe src 는 한 번만 설정 — 이후 전환은 postMessage 로
+  const [loading, setLoading] = useState(true);
+  const [timedOut, setTimedOut] = useState(false);
   const iframeSrc = useMemo(
-    () => `${COMFYUI}/?workflow=${encodeURIComponent(initial)}`,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [], // 마운트 시 고정
+    () => `${COMFYUI}/?workflow=${encodeURIComponent(current)}`,
+    [current],
   );
 
   useEffect(() => {
-    function onMsg(ev: MessageEvent) {
-      if (ev.data?.type === "myaniform:ready") {
-        iframeReadyRef.current = true;
-      }
-    }
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
-
-  // current 변경 시 iframe 에 전환 메시지
-  useEffect(() => {
-    if (!iframeReadyRef.current) return;
-    iframeRef.current?.contentWindow?.postMessage(
-      { type: "myaniform:load", workflow: current },
-      COMFYUI,
-    );
     setParams({ workflow: current }, { replace: true });
+    setLoading(true);
+    setTimedOut(false);
+    const timer = window.setTimeout(() => setTimedOut(true), 5000);
+    return () => window.clearTimeout(timer);
   }, [current, setParams]);
 
   return (
@@ -97,13 +82,33 @@ export default function WorkflowViewerPage() {
           새 창에서 열기 ↗
         </a>
       </div>
-      <iframe
-        ref={iframeRef}
-        src={iframeSrc}
-        title="ComfyUI"
-        className="flex-1 w-full border-0"
-        allow="clipboard-read; clipboard-write"
-      />
+      <div className="relative flex-1">
+        <iframe
+          src={iframeSrc}
+          title="ComfyUI"
+          className="flex-1 w-full h-full border-0"
+          allow="clipboard-read; clipboard-write"
+          onLoad={() => {
+            setLoading(false);
+            setTimedOut(false);
+          }}
+        />
+        {loading && (
+          <div className="absolute inset-0 grid place-items-center bg-bg/85 backdrop-blur-sm">
+            <div className="max-w-md rounded-2xl border border-white/10 bg-surface-raised/90 p-5 text-center shadow-card">
+              <p className="text-sm font-medium text-white mb-1">워크플로우 로딩 중</p>
+              <p className="text-xs text-gray-400">
+                ComfyUI iframe 이 열리면 여기서 바로 워크플로우를 확인할 수 있습니다.
+              </p>
+              {timedOut && (
+                <p className="text-xs text-red-300 mt-3">
+                  로딩이 지연되고 있습니다. ComfyUI 서버가 꺼져 있으면 iframe 이 비어 보일 수 있습니다.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

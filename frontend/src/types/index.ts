@@ -2,6 +2,15 @@ export type GenerationStatus = "idle" | "running" | "completed" | "failed";
 export type SceneType = "lipsync" | "loop" | "effect";
 export type TTSEngine = "qwen3" | "s2pro";
 
+export interface VoiceGenParams {
+  top_k?: number;
+  top_p?: number;
+  temperature?: number;
+  repetition_penalty?: number;
+  max_new_tokens?: number;
+  seed?: number;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -16,11 +25,18 @@ export interface Character {
   project_id: string;
   name: string;
   description: string | null;
+  negative_prompt: string | null;
+  resolution_w: number | null;
+  resolution_h: number | null;
+  image_params: string | null;
   image_path: string | null;
   sheet_path: string | null;   // VNCCS 캐릭터 시트 (Phase 4)
   sprite_path: string | null;  // VNCCS 스프라이트 (Phase 4)
   voice_design: string | null;
   voice_sample_path: string | null;
+  voice_sample_text: string | null;
+  voice_language: string | null;
+  voice_params: string | null;
   tts_engine: TTSEngine;
 }
 

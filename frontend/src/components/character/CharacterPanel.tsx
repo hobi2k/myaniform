@@ -1,12 +1,64 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Layers, Mic, Plus, Trash2, Upload, User, Wand2 } from "lucide-react";
+import { Image as ImageIcon, Layers, Mic, Plus, Settings2, Trash2, Upload, User, Wand2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { api } from "../../api";
-import type { Character } from "../../types";
+import type { Character, ImageParams, LoraSelection, VoiceGenParams } from "../../types";
 import Button from "../ui/Button";
 
 interface Props {
   projectId: string;
+}
+
+type CharacterTaskStage =
+  | "idle"
+  | "preparing"
+  | "queued"
+  | "running"
+  | "saving"
+  | "complete"
+  | "error";
+
+interface CharacterTaskEvent {
+  type: "status" | "complete" | "error";
+  stage?: CharacterTaskStage;
+  message?: string;
+  progress_pct?: number;
+  node?: string;
+  prompt_id?: string;
+  character?: Character;
+}
+
+interface CharacterTaskState {
+  kind: "image" | "sheet" | "voice" | null;
+  label: string;
+  stage: CharacterTaskStage;
+  message: string;
+  progressPct: number;
+  node: string | null;
+  logs: string[];
+  error: string | null;
+  running: boolean;
+}
+
+const IDLE_TASK: CharacterTaskState = {
+  kind: null,
+  label: "",
+  stage: "idle",
+  message: "",
+  progressPct: 0,
+  node: null,
+  logs: [],
+  error: null,
+  running: false,
+};
+
+function parseJson<T>(s: string | null | undefined, fallback: T): T {
+  if (!s) return fallback;
+  try {
+    return { ...fallback, ...JSON.parse(s) };
+  } catch {
+    return fallback;
+  }
 }
 
 export default function CharacterPanel({ projectId }: Props) {
@@ -142,26 +194,29 @@ function CharacterEditor({
   onUpdated: (c: Character) => void;
   onDelete: () => void;
 }) {
-  const qc = useQueryClient();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
 
   const [desc, setDesc] = useState(character.description ?? "");
+  const [negativePrompt, setNegativePrompt] = useState(character.negative_prompt ?? "");
   const [voiceDesign, setVoiceDesign] = useState(character.voice_design ?? "");
+  const [voiceSampleText, setVoiceSampleText] = useState(character.voice_sample_text ?? "안녕하세요.");
+  const [voiceLanguage, setVoiceLanguage] = useState(character.voice_language ?? "Korean");
+  const [voiceParams, setVoiceParams] = useState<VoiceGenParams>(
+    parseJson<VoiceGenParams>(character.voice_params, {}),
+  );
+  const [resolutionW, setResolutionW] = useState<number | "">(character.resolution_w ?? "");
+  const [resolutionH, setResolutionH] = useState<number | "">(character.resolution_h ?? "");
+  const [imageParams, setImageParams] = useState<ImageParams>(
+    parseJson<ImageParams>(character.image_params, {}),
+  );
+  const [showImageAdvanced, setShowImageAdvanced] = useState(false);
+  const [showVoiceAdvanced, setShowVoiceAdvanced] = useState(false);
+  const [task, setTask] = useState<CharacterTaskState>(IDLE_TASK);
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<Character>) =>
       api.characters.update(projectId, character.id, data),
-    onSuccess: onUpdated,
-  });
-
-  const generateImageMutation = useMutation({
-    mutationFn: () => {
-      // description 먼저 저장 후 생성
-      return api.characters
-        .update(projectId, character.id, { description: desc })
-        .then(() => api.characters.generateImage(projectId, character.id));
-    },
     onSuccess: onUpdated,
   });
 
@@ -173,13 +228,6 @@ function CharacterEditor({
   // Phase 4: VNCCS 시트 / 스프라이트
   const sheetInputRef = useRef<HTMLInputElement>(null);
   const spriteInputRef = useRef<HTMLInputElement>(null);
-  const generateSheetMutation = useMutation({
-    mutationFn: () =>
-      api.characters
-        .update(projectId, character.id, { description: desc })
-        .then(() => api.characters.generateSheet(projectId, character.id)),
-    onSuccess: onUpdated,
-  });
   const uploadSheetMutation = useMutation({
     mutationFn: (file: File) => api.characters.uploadSheet(projectId, character.id, file),
     onSuccess: onUpdated,
@@ -189,15 +237,141 @@ function CharacterEditor({
     onSuccess: onUpdated,
   });
 
-  const designVoiceMutation = useMutation({
-    mutationFn: () => api.characters.designVoice(projectId, character.id, voiceDesign),
-    onSuccess: onUpdated,
-  });
-
   const uploadVoiceMutation = useMutation({
     mutationFn: (file: File) => api.characters.uploadVoice(projectId, character.id, file),
     onSuccess: onUpdated,
   });
+
+  const appendTaskLog = (message: string) => {
+    const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+    setTask((prev) => ({ ...prev, logs: [...prev.logs, line] }));
+  };
+
+  const persistCharacterOptions = () =>
+    api.characters.update(projectId, character.id, {
+      description: desc,
+      negative_prompt: negativePrompt,
+      resolution_w: resolutionW === "" ? null : resolutionW,
+      resolution_h: resolutionH === "" ? null : resolutionH,
+      image_params: JSON.stringify(imageParams),
+      voice_sample_text: voiceSampleText,
+      voice_language: voiceLanguage,
+      voice_params: JSON.stringify(voiceParams),
+    });
+
+  const shouldLogStatus = (ev: CharacterTaskEvent) => {
+    if (ev.stage !== "running") return true;
+    const pct = ev.progress_pct ?? -1;
+    return pct >= 0 && pct % 10 === 0;
+  };
+
+  const runTaskStream = async ({
+    kind,
+    label,
+    url,
+    body,
+    beforeStart,
+  }: {
+    kind: "image" | "sheet" | "voice";
+    label: string;
+    url: string;
+    body?: unknown;
+    beforeStart?: () => Promise<void>;
+  }) => {
+    setTask({
+      kind,
+      label,
+      stage: "preparing",
+      message: "작업 준비 중...",
+      progressPct: 1,
+      node: null,
+      logs: [],
+      error: null,
+      running: true,
+    });
+    appendTaskLog(`${label} 시작`);
+
+    try {
+      if (beforeStart) await beforeStart();
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!resp.ok || !resp.body) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(err.detail ?? `${label} 요청 실패`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const ev: CharacterTaskEvent = JSON.parse(line.slice(6));
+          if (ev.type === "status") {
+            setTask((prev) => ({
+              ...prev,
+              stage: ev.stage ?? prev.stage,
+              message: ev.message ?? prev.message,
+              progressPct: ev.progress_pct ?? prev.progressPct,
+              node: ev.node ?? prev.node,
+              running: (ev.stage ?? prev.stage) !== "complete",
+            }));
+            if (ev.message && shouldLogStatus(ev)) appendTaskLog(ev.message);
+          } else if (ev.type === "complete" && ev.character) {
+            setTask((prev) => ({
+              ...prev,
+              stage: "complete",
+              message: `${label} 완료`,
+              progressPct: 100,
+              running: false,
+            }));
+            appendTaskLog(`${label} 완료`);
+            onUpdated(ev.character);
+          } else if (ev.type === "error") {
+            throw new Error(ev.message ?? `${label} 실패`);
+          }
+        }
+      }
+    } catch (err) {
+      const message = (err as Error).message;
+      setTask((prev) => ({
+        ...prev,
+        stage: "error",
+        message,
+        error: message,
+        running: false,
+      }));
+      appendTaskLog(`오류: ${message}`);
+    }
+  };
+
+  const startImageGeneration = () =>
+    runTaskStream({
+      kind: "image",
+      label: "캐릭터 이미지 생성",
+      url: `/api/projects/${projectId}/characters/${character.id}/image/generate/stream`,
+      beforeStart: () => persistCharacterOptions().then(() => undefined),
+    });
+
+  const startSheetGeneration = () =>
+    runTaskStream({
+      kind: "sheet",
+      label: "캐릭터 시트 생성",
+      url: `/api/projects/${projectId}/characters/${character.id}/sheet/generate/stream`,
+      beforeStart: () => persistCharacterOptions().then(() => undefined),
+    });
+
+  const generationBusy = task.running;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -228,18 +402,83 @@ function CharacterEditor({
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
             />
+            <div className="border-t border-white/10 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowImageAdvanced((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-accent transition-colors"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                고급 옵션 {showImageAdvanced ? "▲" : "▼"}
+              </button>
+              {showImageAdvanced && (
+                <div className="mt-3 space-y-3 bg-surface-raised/40 rounded-lg p-3 border border-white/5">
+                  <div>
+                    <label className="text-[11px] text-gray-400 mb-1 block">Negative Prompt</label>
+                    <textarea
+                      className="input-base w-full resize-none h-14"
+                      placeholder="worst quality, low quality, blurry, text, watermark..."
+                      value={negativePrompt}
+                      onChange={(e) => setNegativePrompt(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-gray-400 mb-1 block">너비</label>
+                      <input
+                        type="number"
+                        className="input-base w-full"
+                        placeholder="832"
+                        value={resolutionW}
+                        onChange={(e) => setResolutionW(e.target.value ? parseInt(e.target.value) : "")}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-gray-400 mb-1 block">높이</label>
+                      <input
+                        type="number"
+                        className="input-base w-full"
+                        placeholder="1216"
+                        value={resolutionH}
+                        onChange={(e) => setResolutionH(e.target.value ? parseInt(e.target.value) : "")}
+                      />
+                    </div>
+                  </div>
+                  <CharacterImageParamsEditor value={imageParams} onChange={setImageParams} />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={updateMutation.isPending}
+                      disabled={generationBusy}
+                      onClick={() =>
+                        updateMutation.mutate({
+                          description: desc,
+                          negative_prompt: negativePrompt,
+                          resolution_w: resolutionW === "" ? null : resolutionW,
+                          resolution_h: resolutionH === "" ? null : resolutionH,
+                          image_params: JSON.stringify(imageParams),
+                        })
+                      }
+                    >
+                      설정 저장
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button
                 size="sm"
                 variant="primary"
-                loading={generateImageMutation.isPending}
-                disabled={!desc.trim()}
-                onClick={() => generateImageMutation.mutate()}
+                loading={generationBusy && task.kind === "image"}
+                disabled={!desc.trim() || generationBusy}
+                onClick={startImageGeneration}
               >
                 <Wand2 className="w-3 h-3" />
-                AI 생성
+                {character.image_path ? "다시 생성" : "AI 생성"}
               </Button>
-              <Button size="sm" onClick={() => imageInputRef.current?.click()}>
+              <Button size="sm" disabled={generationBusy} onClick={() => imageInputRef.current?.click()}>
                 <Upload className="w-3 h-3" />
                 업로드
               </Button>
@@ -289,16 +528,17 @@ function CharacterEditor({
                 size="sm"
                 variant="primary"
                 className="flex-1 text-[11px]"
-                loading={generateSheetMutation.isPending}
-                disabled={!desc.trim()}
-                onClick={() => generateSheetMutation.mutate()}
+                loading={generationBusy && task.kind === "sheet"}
+                disabled={!desc.trim() || generationBusy}
+                onClick={startSheetGeneration}
               >
                 <Wand2 className="w-3 h-3" />
-                AI
+                {character.sheet_path ? "재생성" : "AI"}
               </Button>
               <Button
                 size="sm"
                 className="flex-1 text-[11px]"
+                disabled={generationBusy}
                 onClick={() => sheetInputRef.current?.click()}
               >
                 <Upload className="w-3 h-3" />
@@ -331,6 +571,7 @@ function CharacterEditor({
               <Button
                 size="sm"
                 className="w-full text-[11px]"
+                disabled={generationBusy}
                 onClick={() => spriteInputRef.current?.click()}
               >
                 <Upload className="w-3 h-3" />
@@ -363,7 +604,7 @@ function CharacterEditor({
             <Mic className="w-3.5 h-3.5" />
             보이스 샘플 준비됨
             <audio
-              src={`/comfy_input/${character.voice_sample_path}`}
+              src={`/${character.voice_sample_path}`}
               controls
               className="ml-auto h-7 max-w-60"
             />
@@ -376,18 +617,81 @@ function CharacterEditor({
           value={voiceDesign}
           onChange={(e) => setVoiceDesign(e.target.value)}
         />
+        <div className="border-t border-white/10 pt-2 mb-2">
+          <button
+            type="button"
+            onClick={() => setShowVoiceAdvanced((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-accent transition-colors"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+            고급 옵션 {showVoiceAdvanced ? "▲" : "▼"}
+          </button>
+          {showVoiceAdvanced && (
+            <div className="mt-3 space-y-3 bg-surface-raised/40 rounded-lg p-3 border border-white/5">
+              <div>
+                <label className="text-[11px] text-gray-400 mb-1 block">샘플 문장</label>
+                <textarea
+                  className="input-base w-full resize-none h-14"
+                  placeholder="안녕하세요. 오늘도 잘 부탁드려요."
+                  value={voiceSampleText}
+                  onChange={(e) => setVoiceSampleText(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-gray-400 mb-1 block">언어</label>
+                <select
+                  className="input-base w-full"
+                  value={voiceLanguage}
+                  onChange={(e) => setVoiceLanguage(e.target.value)}
+                >
+                  <option value="Korean">Korean</option>
+                  <option value="English">English</option>
+                  <option value="Japanese">Japanese</option>
+                  <option value="Chinese">Chinese</option>
+                </select>
+              </div>
+              <VoiceParamsEditor value={voiceParams} onChange={setVoiceParams} />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={updateMutation.isPending}
+                  disabled={generationBusy}
+                  onClick={() =>
+                    updateMutation.mutate({
+                      voice_sample_text: voiceSampleText,
+                      voice_language: voiceLanguage,
+                      voice_params: JSON.stringify(voiceParams),
+                      voice_design: voiceDesign,
+                    })
+                  }
+                >
+                  음성 설정 저장
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex gap-2 flex-wrap">
           <Button
             size="sm"
             variant="primary"
-            loading={designVoiceMutation.isPending}
-            disabled={!voiceDesign.trim()}
-            onClick={() => designVoiceMutation.mutate()}
+            loading={generationBusy && task.kind === "voice"}
+            disabled={!voiceDesign.trim() || generationBusy}
+            onClick={() =>
+              runTaskStream({
+                kind: "voice",
+                label: "보이스 디자인 생성",
+                url: `/api/projects/${projectId}/characters/${character.id}/voice/design/stream`,
+                body: { voice_design: voiceDesign },
+                beforeStart: () => persistCharacterOptions().then(() => undefined),
+              })
+            }
           >
             <Wand2 className="w-3 h-3" />
-            Voice Design으로 생성
+            {character.voice_sample_path ? "보이스 재생성" : "Voice Design으로 생성"}
           </Button>
-          <Button size="sm" onClick={() => voiceInputRef.current?.click()}>
+          <Button size="sm" disabled={generationBusy} onClick={() => voiceInputRef.current?.click()}>
             <Upload className="w-3 h-3" />
             WAV 업로드
           </Button>
@@ -403,6 +707,7 @@ function CharacterEditor({
           />
           <select
             className="input-base py-1 ml-auto"
+            disabled={generationBusy}
             value={character.tts_engine}
             onChange={(e) =>
               updateMutation.mutate({ tts_engine: e.target.value as "qwen3" | "s2pro" })
@@ -411,6 +716,454 @@ function CharacterEditor({
             <option value="qwen3">QWEN3 TTS</option>
             <option value="s2pro">Fish S2 Pro</option>
           </select>
+        </div>
+      </div>
+
+      {(character.image_path || character.sheet_path || character.voice_sample_path) && (
+        <div className="space-y-3 border-t border-white/10 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              자산 재생성
+            </span>
+            <span className="text-[10px] text-gray-600">
+              기존 결과물을 덮어씁니다
+            </span>
+          </div>
+
+          {character.image_path && (
+            <div className="flex items-start gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={generationBusy && task.kind === "image"}
+                disabled={!desc.trim() || generationBusy}
+                onClick={startImageGeneration}
+              >
+                🖼️ 이미지 재생성
+              </Button>
+              <div className="flex-1 min-w-0">
+                <img
+                  src={`/${character.image_path}`}
+                  className="w-16 h-16 rounded-lg object-cover border border-white/10"
+                />
+              </div>
+            </div>
+          )}
+
+          {character.sheet_path && (
+            <div className="flex items-start gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={generationBusy && task.kind === "sheet"}
+                disabled={!desc.trim() || generationBusy}
+                onClick={startSheetGeneration}
+              >
+                📚 시트 재생성
+              </Button>
+              <div className="flex-1 min-w-0">
+                <img
+                  src={`/${character.sheet_path}`}
+                  className="w-20 h-12 rounded-lg object-contain bg-surface-overlay border border-white/10"
+                />
+              </div>
+            </div>
+          )}
+
+          {character.voice_sample_path && (
+            <div className="flex items-start gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={generationBusy && task.kind === "voice"}
+                disabled={!voiceDesign.trim() || generationBusy}
+                onClick={() =>
+                  runTaskStream({
+                    kind: "voice",
+                    label: "보이스 디자인 생성",
+                    url: `/api/projects/${projectId}/characters/${character.id}/voice/design/stream`,
+                    body: { voice_design: voiceDesign },
+                    beforeStart: () => persistCharacterOptions().then(() => undefined),
+                  })
+                }
+              >
+                🎤 보이스 재생성
+              </Button>
+              <div className="flex-1 min-w-0">
+                <audio
+                  src={`/${character.voice_sample_path}`}
+                  controls
+                  className="w-full h-8"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(task.stage !== "idle" || task.logs.length > 0) && (
+        <div className={`rounded-xl border p-3 ${
+          task.stage === "error"
+            ? "border-red-500/40 bg-red-950/20"
+            : task.stage === "complete"
+            ? "border-emerald-500/40 bg-emerald-950/20"
+            : "border-accent/30 bg-surface-overlay/40"
+        }`}>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-200 truncate">
+                {task.label || "작업 상태"}
+              </p>
+              <p className="text-[11px] text-gray-400 truncate">
+                {task.message || "대기 중"}
+              </p>
+            </div>
+            <span className="text-xs font-mono text-accent flex-shrink-0">
+              {task.progressPct}%
+            </span>
+          </div>
+          <div className="h-2 bg-surface-sunken rounded-full overflow-hidden mb-2">
+            <div
+              className={`h-full transition-all duration-300 ${
+                task.stage === "error"
+                  ? "bg-red-500"
+                  : task.stage === "complete"
+                  ? "bg-emerald-500"
+                  : "bg-gradient-to-r from-accent-hover to-accent"
+              }`}
+              style={{ width: `${task.progressPct}%` }}
+            />
+          </div>
+          {task.node && task.stage === "running" && (
+            <p className="text-[11px] text-gray-500 mb-2">현재 노드: {task.node}</p>
+          )}
+          <div className="rounded-lg bg-black/30 border border-white/5 p-2 max-h-36 overflow-y-auto font-mono text-[11px] text-gray-300 space-y-0.5">
+            {task.logs.length === 0 ? (
+              <div className="text-gray-600">로그 대기 중...</div>
+            ) : (
+              task.logs.map((line, index) => (
+                <div key={index} className="whitespace-pre-wrap break-all">
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
+          {task.error && (
+            <p className="mt-2 text-xs text-red-300">{task.error}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CharacterImageParamsEditor({
+  value,
+  onChange,
+}: {
+  value: ImageParams;
+  onChange: (p: ImageParams) => void;
+}) {
+  const set = (k: keyof ImageParams, v: number | string | boolean | undefined) => {
+    const next = { ...value };
+    if (v === "" || v === undefined) {
+      delete (next as Record<string, unknown>)[k as string];
+    } else {
+      (next as Record<string, unknown>)[k as string] = v;
+    }
+    onChange(next);
+  };
+
+  return (
+    <div className="border-t border-white/5 pt-2">
+      <div className="text-[11px] text-gray-400 mb-2 font-semibold">🖼️ 이미지 파라미터</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div>
+          <label className="text-[10px] text-gray-500">steps</label>
+          <input
+            type="number"
+            className="input-base w-full"
+            placeholder="30"
+            value={value.steps ?? ""}
+            onChange={(e) => set("steps", e.target.value ? parseInt(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">cfg</label>
+          <input
+            type="number"
+            step="0.1"
+            className="input-base w-full"
+            placeholder="5.0"
+            value={value.cfg ?? ""}
+            onChange={(e) => set("cfg", e.target.value ? parseFloat(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">seed</label>
+          <input
+            type="number"
+            className="input-base w-full"
+            placeholder="0"
+            value={value.seed ?? ""}
+            onChange={(e) => set("seed", e.target.value ? parseInt(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">sampler</label>
+          <select
+            className="input-base w-full"
+            value={value.sampler ?? ""}
+            onChange={(e) => set("sampler", e.target.value || undefined)}
+          >
+            <option value="">기본</option>
+            <option value="euler">euler</option>
+            <option value="euler_ancestral">euler_ancestral</option>
+            <option value="dpmpp_2m">dpmpp_2m</option>
+            <option value="dpmpp_2m_sde">dpmpp_2m_sde</option>
+            <option value="unipc">unipc</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">scheduler</label>
+          <select
+            className="input-base w-full"
+            value={value.scheduler ?? ""}
+            onChange={(e) => set("scheduler", e.target.value || undefined)}
+          >
+            <option value="">기본</option>
+            <option value="sgm_uniform">sgm_uniform</option>
+            <option value="simple">simple</option>
+            <option value="karras">karras</option>
+            <option value="normal">normal</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">denoise</label>
+          <input
+            type="number"
+            step="0.05"
+            className="input-base w-full"
+            placeholder="1.0"
+            value={value.denoise ?? ""}
+            onChange={(e) => set("denoise", e.target.value ? parseFloat(e.target.value) : undefined)}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-4 mt-2 text-[11px]">
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.face_detailer !== false}
+            onChange={(e) => set("face_detailer", e.target.checked ? undefined : false)}
+          />
+          <span>Face Detailer</span>
+        </label>
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.hand_detailer !== false}
+            onChange={(e) => set("hand_detailer", e.target.checked ? undefined : false)}
+          />
+          <span>Hand Detailer</span>
+        </label>
+      </div>
+      <div className="mt-3">
+        <CharacterLoraPicker
+          value={(value.loras as LoraSelection[]) ?? []}
+          onChange={(loras) => {
+            const next = { ...value };
+            if (loras.length) (next as Record<string, unknown>).loras = loras;
+            else delete (next as Record<string, unknown>).loras;
+            onChange(next);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CharacterLoraPicker({
+  value,
+  onChange,
+}: {
+  value: LoraSelection[];
+  onChange: (v: LoraSelection[]) => void;
+}) {
+  const { data: available = [] } = useQuery({
+    queryKey: ["loras"],
+    queryFn: () => api.loras.list(),
+    staleTime: 60_000,
+  });
+  const remaining = available.filter((e) => !value.some((v) => v.name === e.name));
+  const [customName, setCustomName] = useState("");
+
+  const add = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || value.some((v) => v.name === trimmed)) return;
+    onChange([...value, { name: trimmed, strength: 1.0 }]);
+  };
+  const update = (idx: number, patch: Partial<LoraSelection>) =>
+    onChange(value.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
+  const remove = (idx: number) => onChange(value.filter((_, i) => i !== idx));
+
+  return (
+    <div>
+      <label className="text-xs text-gray-400 mb-1 block">LoRA 추가 (선택)</label>
+      <div className="space-y-1.5">
+        {value.map((l, idx) => (
+          <div key={idx} className="flex items-center gap-2 text-xs">
+            <span className="flex-1 truncate input-base py-1">{l.name}</span>
+            <input
+              type="number"
+              step="0.05"
+              min="-2"
+              max="2"
+              value={l.strength}
+              onChange={(e) => update(idx, { strength: parseFloat(e.target.value) })}
+              className="input-base w-16 py-1"
+            />
+            <button
+              onClick={() => remove(idx)}
+              className="p-1 hover:text-red-400 transition-colors"
+              title="제거"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        <select
+          className="input-base w-full"
+          value=""
+          onChange={(e) => {
+            add(e.target.value);
+            e.target.value = "";
+          }}
+        >
+          <option value="">+ 목록에서 선택... ({remaining.length}개)</option>
+          {remaining.map((e) => (
+            <option key={e.name} value={e.name}>
+              {e.group ? `[${e.group}] ` : ""}
+              {e.name}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-1">
+          <input
+            type="text"
+            placeholder="직접 입력: my_lora.safetensors"
+            className="input-base flex-1 py-1 text-xs"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add(customName);
+                setCustomName("");
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              add(customName);
+              setCustomName("");
+            }}
+            disabled={!customName.trim()}
+            className="px-2 py-1 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs"
+            title="추가"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VoiceParamsEditor({
+  value,
+  onChange,
+}: {
+  value: VoiceGenParams;
+  onChange: (p: VoiceGenParams) => void;
+}) {
+  const set = (k: keyof VoiceGenParams, v: number | undefined) => {
+    const next = { ...value };
+    if (v === undefined || Number.isNaN(v)) {
+      delete (next as Record<string, unknown>)[k as string];
+    } else {
+      (next as Record<string, unknown>)[k as string] = v;
+    }
+    onChange(next);
+  };
+
+  return (
+    <div className="border-t border-white/5 pt-2">
+      <div className="text-[11px] text-gray-400 mb-2 font-semibold">🎙️ 보이스 파라미터</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div>
+          <label className="text-[10px] text-gray-500">top_k</label>
+          <input
+            type="number"
+            className="input-base w-full"
+            placeholder="50"
+            value={value.top_k ?? ""}
+            onChange={(e) => set("top_k", e.target.value ? parseInt(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">top_p</label>
+          <input
+            type="number"
+            step="0.01"
+            className="input-base w-full"
+            placeholder="1.0"
+            value={value.top_p ?? ""}
+            onChange={(e) => set("top_p", e.target.value ? parseFloat(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">temperature</label>
+          <input
+            type="number"
+            step="0.05"
+            className="input-base w-full"
+            placeholder="0.9"
+            value={value.temperature ?? ""}
+            onChange={(e) => set("temperature", e.target.value ? parseFloat(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">repetition_penalty</label>
+          <input
+            type="number"
+            step="0.01"
+            className="input-base w-full"
+            placeholder="1.05"
+            value={value.repetition_penalty ?? ""}
+            onChange={(e) => set("repetition_penalty", e.target.value ? parseFloat(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">max_new_tokens</label>
+          <input
+            type="number"
+            className="input-base w-full"
+            placeholder="2048"
+            value={value.max_new_tokens ?? ""}
+            onChange={(e) => set("max_new_tokens", e.target.value ? parseInt(e.target.value) : undefined)}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500">seed</label>
+          <input
+            type="number"
+            className="input-base w-full"
+            placeholder="-1"
+            value={value.seed ?? ""}
+            onChange={(e) => set("seed", e.target.value ? parseInt(e.target.value) : undefined)}
+          />
         </div>
       </div>
     </div>

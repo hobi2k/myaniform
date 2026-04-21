@@ -34,6 +34,27 @@ cd frontend && npm run dev              # :5173 (별도 터미널)
 
 접속: http://localhost:5173
 
+### 서버 끄기
+
+`run.sh` 로 올린 백엔드 서버(ComfyUI + FastAPI)를 내릴 때:
+
+```bash
+pkill -f "ComfyUI/main.py"
+pkill -f "uvicorn backend.main:app"
+```
+
+프론트 개발 서버도 같이 끄려면:
+
+```bash
+pkill -f "vite"
+```
+
+실행 중인지 확인:
+
+```bash
+ps -ef | rg "ComfyUI/main.py|uvicorn backend.main:app|vite"
+```
+
 ---
 
 ## 문서

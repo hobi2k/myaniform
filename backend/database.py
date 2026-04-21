@@ -23,6 +23,14 @@ _ADDITIVE_MIGRATIONS = [
     # Phase 4: VNCCS sprite reference
     ("character", "sprite_path",    "VARCHAR"),
     ("character", "sheet_path",     "VARCHAR"),
+    # Character image advanced params
+    ("character", "negative_prompt","TEXT"),
+    ("character", "resolution_w",   "INTEGER"),
+    ("character", "resolution_h",   "INTEGER"),
+    ("character", "image_params",   "TEXT"),
+    ("character", "voice_sample_text", "TEXT"),
+    ("character", "voice_language",    "VARCHAR"),
+    ("character", "voice_params",      "TEXT"),
 ]
 
 
