@@ -1,6 +1,6 @@
 # myaniform 현재 상태
 
-> 최종 업데이트: 2026-04-20
+> 최종 업데이트: 2026-04-21
 
 ## 플랫폼 개요
 
@@ -15,6 +15,18 @@
 ---
 
 ## 최근 이벤트 로그
+
+### 2026-04-21
+
+- **모델 저장소 Windows D: 드라이브로 이전 + 심볼릭 링크** — `ComfyUI/models/*` 전체 236 GB 를 `rsync --remove-source-files` 로 `/mnt/d/myaniform/models` 로 이동 (DrvFs 쓰루풋 제한 탓에 약 2시간 소요). 이후 `ComfyUI/models -> /mnt/d/myaniform/models` 심볼릭 링크 생성. 기존 상대 경로가 투명하게 동작하도록 유지. 이동 후 `myaniform/ComfyUI` 디렉토리는 669 MB (코드 + 커스텀 노드만) 로 축소.
+- **⚠️ WSL2 `ext4.vhdx` 컴팩션 아직 미완** — WSL 내부 `df` 상에서는 714 GB 여유 (정상) 이지만 Windows 호스트 측 `ext4.vhdx` 는 **여전히 539 GB 차지** (WSL2 는 자동 shrink 안 함). 다음 Codex/Claude 세션 또는 사용자가 직접 아래 수동 절차 실행 필요:
+  1. **모든** WSL 세션 종료 (Claude Code/VSCode WSL 포함)
+  2. 관리자 PowerShell 에서 `wsl --shutdown` 후 10초 대기
+  3. `diskpart` 실행 → `select vdisk file="C:\Users\Hosung\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx"` → `attach vdisk readonly` → `compact vdisk` → `detach vdisk` → `exit`
+  4. 예상 결과: 539 GB → ~270 GB (약 236 GB 반환)
+- **SetupBanner 제거** — `frontend/src/components/ui/SetupBanner.tsx` 삭제 + `Layout.tsx` 에서 import/JSX 삭제. 사유: 모델 체크가 폴스 포지티브를 너무 자주 띄움.
+- **LoRA 자유 입력 지원** — `SceneEditor.tsx` 의 `LoraPicker` 에 텍스트 입력 + Plus 버튼 추가. 기존 드롭다운 목록에 없는 LoRA 파일명도 사용자가 직접 입력 가능 (Enter 키로도 추가). 커스텀/신규 LoRA 추가 시 매번 백엔드 재시작 필요 없음.
+- **서비스 상태 (migrations 적용 후 재시작)**: ComfyUI PID 707955, backend PID 709522 (uvicorn), Vite PID 356989 — 모두 `200 OK`.
 
 ### 2026-04-20
 
@@ -137,3 +149,44 @@
 6. 자막 오버레이 (선택적)
 7. 에피소드 프리셋/템플릿
 8. 프로젝트 export/import
+
+---
+
+## Codex 핸드오프 메모 (2026-04-21 기준)
+
+**진행 중인 단일 작업**: WSL2 `ext4.vhdx` 수동 컴팩션 (위 `2026-04-21` 엔트리의 4단계 절차 참고). Claude/Codex 가 WSL 내부에서 실행 중인 한 `attach vdisk` 가 "다른 프로세스가 파일을 사용 중" 으로 실패하므로 **사용자가 직접 Windows 측에서** 실행해야 함.
+
+**모델 경로 계약**:
+- 모든 워크플로우 JSON 은 `models/<subdir>/<filename>` 상대 경로 가정 → `ComfyUI/models` 심볼릭 링크가 이를 `/mnt/d/myaniform/models` 로 투명하게 매핑.
+- 신규 모델 추가 시 `/mnt/d/myaniform/models/<subdir>/` 에 직접 배치 (WSL 내부 `ComfyUI/models/<subdir>` 경로로 쓰면 자동으로 D: 에 들어감).
+- ⚠️ `setup.sh` 의 자동 다운로드는 아직 이전을 반영 안 함. 신규 clone 시점에 `ComfyUI/models` 디렉토리가 없으면 기본 경로에 받아버리므로, clone 후 먼저 심볼릭 링크를 만들거나 `setup.sh` 를 수정해야 함.
+
+**다음 우선 작업 후보**:
+1. `setup.sh` 에 "models 디렉토리가 없고 `/mnt/d/myaniform/models` 존재 시 자동 심볼링 링크" 로직 추가.
+2. `#23 Verify ws_effect.json end-to-end` — 실제 이펙트 씬 생성해서 2-stage 흐름 검증.
+3. `#24 Port FastFidelity recipe to S2V workflow` — `operations.md` 의 FastFidelity 참고 섹션 따라 `ws_s2v.json` 에 CFGZeroStar + 샘플러 교체.
+
+**건드리면 안 되는 것**:
+- `ComfyUI/models` 심볼릭 링크 — 실수로 `rm -rf` 하면 target 도 따라감. 풀 때는 `unlink ComfyUI/models` 만.
+- `workflow_patcher.py` 의 `_apply_image_params` / `_apply_video_params` / `_inject_multi_loadimages` — Phase 2~5 UI 가 이 세 함수에 묶여 있음. 시그니처 바꾸면 프론트 파라미터 주입 전부 깨짐.
+- `ws_tts_clone.json` 의 `x_vector_only_mode=true` — false 로 돌리면 TTS 가 1초 무음으로 돌아감 (known bug, memory 기록).
+
+**서비스 재기동 레시피**:
+```bash
+cd /home/hosung/pytorch-demo/myaniform && source .venv/bin/activate
+# ComfyUI (16GB VRAM 안전 조합)
+nohup python ComfyUI/main.py --port 8188 --normalvram --cache-none --disable-smart-memory --reserve-vram 0.5 > logs/comfyui.log 2>&1 &
+# Backend
+nohup python -m uvicorn backend.main:app --port 8000 --host 127.0.0.1 > logs/backend.log 2>&1 &
+# Frontend (이미 돌고 있으면 생략)
+cd frontend && nohup npm run dev > ../logs/frontend.log 2>&1 &
+```
+
+**헬스 체크**:
+```bash
+curl -s -o /dev/null -w "ComfyUI=%{http_code}\n" http://127.0.0.1:8188/system_stats
+curl -s -o /dev/null -w "backend=%{http_code}\n"  http://127.0.0.1:8000/api/projects
+curl -s -o /dev/null -w "vite=%{http_code}\n"     http://127.0.0.1:5173/
+```
+
+세 줄 다 `200` 이면 정상.
