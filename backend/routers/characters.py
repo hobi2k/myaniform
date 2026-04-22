@@ -11,7 +11,12 @@ from sqlmodel import Session, select
 from ..database import get_session
 from ..models import Character, CharacterCreate, CharacterRead, TTSEngine
 from ..services.comfyui_client import ensure_nodes_available, run_workflow
-from ..services.workflow_patcher import patch_char_generate, patch_character_sheet, patch_voice_design
+from ..services.workflow_patcher import (
+    find_output_targets,
+    patch_char_generate,
+    patch_character_sheet,
+    patch_voice_design,
+)
 
 UPLOAD_DIR = Path("uploads")
 VOICES_DIR = Path("voices")
@@ -96,6 +101,7 @@ async def _run_character_workflow_stream(
     char: Character,
     workflow: dict,
     kind: str,
+    execution_targets: list[str] | None,
     success_message: str,
     persist,
     session: Session,
@@ -154,7 +160,12 @@ async def _run_character_workflow_stream(
                         return
                     await queue.put(_sse(payload))
 
-                output = await run_workflow(workflow, kind=kind, on_event=on_event)
+                output = await run_workflow(
+                    workflow,
+                    kind=kind,
+                    execution_targets=execution_targets,
+                    on_event=on_event,
+                )
                 updated = persist(output)
                 session.add(updated)
                 session.commit()
@@ -260,6 +271,9 @@ async def upload_image(
 
 
 # ── 이미지 AI 생성 ────────────────────────────────────────────────────────
+#
+# 캐릭터 기본 생성은 "대표 얼굴샷"보다 "전체샷/시트 기반 참조 자산"이 중요하므로
+# 생성 결과를 image_path 와 sheet_path 양쪽에 함께 저장한다.
 
 @router.post("/{char_id}/image/generate", response_model=CharacterRead)
 async def generate_image(
@@ -274,16 +288,20 @@ async def generate_image(
     _ensure_char_image_models("캐릭터 이미지 생성")
 
     wf = patch_char_generate(
+        char.name or char.id,
         char.description,
         negative_prompt=char.negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
         params=_parse_json(char.image_params),
+        output_prefix=f"projects/{project_id}/characters/{char_id}/image",
     )
-    output = await run_workflow(wf)
+    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+    output = await run_workflow(wf, kind="image", execution_targets=output_targets)
 
     dest = UPLOAD_DIR / f"{char_id}_generated.png"
     shutil.copy(output, dest)
     char.image_path = str(dest)
+    char.sheet_path = str(dest)
     session.add(char)
     session.commit()
     session.refresh(char)
@@ -303,22 +321,27 @@ async def generate_image_stream(
     _ensure_char_image_models("캐릭터 이미지 생성")
 
     wf = patch_char_generate(
+        char.name or char.id,
         char.description,
         negative_prompt=char.negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
         params=_parse_json(char.image_params),
+        output_prefix=f"projects/{project_id}/characters/{char_id}/image",
     )
+    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
 
     def persist(output: Path) -> Character:
         dest = UPLOAD_DIR / f"{char_id}_generated.png"
         shutil.copy(output, dest)
         char.image_path = str(dest)
+        char.sheet_path = str(dest)
         return char
 
     return await _run_character_workflow_stream(
         char=char,
         workflow=wf,
         kind="image",
+        execution_targets=output_targets,
         success_message="캐릭터 이미지 생성 완료",
         persist=persist,
         session=session,
@@ -333,10 +356,9 @@ async def generate_sheet(
     char_id: str,
     session: Session = Depends(get_session),
 ):
-    """SDXL 간이 캐릭터 시트 생성 (ws_character_sheet.json).
+    """캐릭터 시트 생성.
 
-    본격 VNCCS 파이프라인 (VN_Step1/Step1.1) 은 /workflows 뷰어에서 수동 실행.
-    여기서는 단일 이미지 턴어라운드 시트를 만들어 sheet_path 로 저장.
+    축약 워크플로우는 제거되었고, 원본 VN Step1 자동화 경로만 허용한다.
     """
     char = _get_char(project_id, char_id, session)
     if not char.description:
@@ -349,8 +371,10 @@ async def generate_sheet(
         negative_prompt=char.negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
         params=_parse_json(char.image_params),
+        output_prefix=f"projects/{project_id}/characters/{char_id}/sheet",
     )
-    output = await run_workflow(wf)
+    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+    output = await run_workflow(wf, kind="image", execution_targets=output_targets)
     dest = UPLOAD_DIR / f"{char_id}_sheet.png"
     shutil.copy(output, dest)
     char.sheet_path = str(dest)
@@ -377,7 +401,9 @@ async def generate_sheet_stream(
         negative_prompt=char.negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
         params=_parse_json(char.image_params),
+        output_prefix=f"projects/{project_id}/characters/{char_id}/sheet",
     )
+    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
 
     def persist(output: Path) -> Character:
         dest = UPLOAD_DIR / f"{char_id}_sheet.png"
@@ -389,6 +415,7 @@ async def generate_sheet_stream(
         char=char,
         workflow=wf,
         kind="image",
+        execution_targets=output_targets,
         success_message="캐릭터 시트 생성 완료",
         persist=persist,
         session=session,
@@ -480,6 +507,7 @@ async def design_voice(
         sample_text=char.voice_sample_text or "안녕하세요.",
         language=char.voice_language or "Korean",
         params=_parse_json(char.voice_params),
+        output_prefix=f"projects/{project_id}/characters/{char_id}/voice",
     )
     output = await run_workflow(wf)
 
@@ -511,6 +539,7 @@ async def design_voice_stream(
         sample_text=char.voice_sample_text or "안녕하세요.",
         language=char.voice_language or "Korean",
         params=_parse_json(char.voice_params),
+        output_prefix=f"projects/{project_id}/characters/{char_id}/voice",
     )
 
     def persist(output: Path) -> Character:
@@ -524,6 +553,7 @@ async def design_voice_stream(
         char=char,
         workflow=wf,
         kind="audio",
+        execution_targets=None,
         success_message="보이스 디자인 생성 완료",
         persist=persist,
         session=session,

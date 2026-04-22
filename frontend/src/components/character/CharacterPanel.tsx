@@ -877,6 +877,11 @@ function CharacterImageParamsEditor({
   return (
     <div className="border-t border-white/5 pt-2">
       <div className="text-[11px] text-gray-400 mb-2 font-semibold">🖼️ 이미지 파라미터</div>
+      <ImageModelPicker
+        workflow="sdxl"
+        value={value.model ?? ""}
+        onChange={(model) => set("model", model || undefined)}
+      />
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         <div>
           <label className="text-[10px] text-gray-500">steps</label>
@@ -979,6 +984,47 @@ function CharacterImageParamsEditor({
           }}
         />
       </div>
+    </div>
+  );
+}
+
+function ImageModelPicker({
+  workflow,
+  value,
+  onChange,
+}: {
+  workflow: "sdxl" | "qwen_edit" | "vnccs_sheet";
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { data } = useQuery({
+    queryKey: ["image-models"],
+    queryFn: () => api.imageModels.list(),
+    staleTime: 60_000,
+  });
+
+  const models =
+    workflow === "qwen_edit" ? (data?.qwen_edit ?? []) : (data?.checkpoints ?? []);
+
+  if (models.length === 0) return null;
+
+  return (
+    <div className="mb-3">
+      <label className="text-xs text-gray-400 mb-1 block">
+        이미지 모델 {workflow === "qwen_edit" ? "(Qwen Edit UNet)" : "(Checkpoint)"}
+      </label>
+      <select
+        className="input-base w-full"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">원본 워크플로우 기본값 사용</option>
+        {models.map((m) => (
+          <option key={m.name} value={m.name}>
+            {m.filename} ({m.size_gb} GB)
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

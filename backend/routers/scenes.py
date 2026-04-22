@@ -189,6 +189,7 @@ async def regenerate_voice(
         voice_sample=character.voice_sample_path if character else None,
         tts_engine=s.tts_engine.value,
         voice_design_text=character.voice_design if character else None,
+        output_prefix=f"projects/{project_id}/scenes/{scene_id}/voice",
     )
     out = await comfy.run_workflow(wf, kind="audio")
     staged = _stage_into_input(out, f"scene_voice_{scene_id}")
@@ -229,6 +230,7 @@ async def regenerate_image(
         workflow=s.image_workflow,
         resolution=(s.resolution_w, s.resolution_h),
         params=_parse_json(s.image_params),
+        output_prefix=f"projects/{project_id}/scenes/{scene_id}/image",
     )
     out = await comfy.run_workflow(wf, kind="image")
     staged = _stage_into_input(out, f"scene_image_{scene_id}")
@@ -263,6 +265,7 @@ async def regenerate_video(
             sfx_prompt=s.sfx_prompt or "ambient indoor sounds",
             diffusion_model=s.diffusion_model,
             params=video_params,
+            output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
         )
     elif s.type == SceneType.loop:
         if not image_path:
@@ -274,6 +277,7 @@ async def regenerate_video(
             loras=_parse_loras(s.loras_json),
             diffusion_model=s.diffusion_model,
             params=video_params,
+            output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
         )
     elif s.type == SceneType.effect:
         if not image_path:
@@ -285,6 +289,7 @@ async def regenerate_video(
             loras=_parse_loras(s.loras_json),
             diffusion_model=s.diffusion_model,
             params=video_params,
+            output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
         )
     else:
         raise HTTPException(400, f"알 수 없는 씬 타입: {s.type}")

@@ -48,6 +48,7 @@ export interface LoraSelection {
 export type ImageWorkflowKind = "qwen_edit" | "sdxl" | "vnccs_sheet";
 
 export interface ImageParams {
+  model?: string;
   steps?: number;
   cfg?: number;
   sampler?: string;
@@ -113,6 +114,11 @@ export interface DiffusionModelList {
   i2v_high: DiffusionModelEntry[];
   i2v_low: DiffusionModelEntry[];
   s2v: DiffusionModelEntry[];
+}
+
+export interface ImageModelList {
+  checkpoints: DiffusionModelEntry[];
+  qwen_edit: DiffusionModelEntry[];
 }
 
 export interface GenerationEvent {

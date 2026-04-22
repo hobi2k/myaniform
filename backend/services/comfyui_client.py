@@ -23,11 +23,18 @@ async def _emit(cb: ProgressCallback | None, event: dict[str, Any]) -> None:
         await result
 
 
-async def queue_prompt(workflow: dict, client_id: str) -> str:
+async def queue_prompt(
+    workflow: dict,
+    client_id: str,
+    execution_targets: list[str] | None = None,
+) -> str:
+    payload: dict[str, Any] = {"prompt": workflow, "client_id": client_id}
+    if execution_targets:
+        payload["partial_execution_targets"] = execution_targets
     async with httpx.AsyncClient() as client:
         res = await client.post(
             f"{COMFYUI_URL}/prompt",
-            json={"prompt": workflow, "client_id": client_id},
+            json=payload,
             timeout=30,
         )
         if res.status_code >= 400:
@@ -74,6 +81,7 @@ async def ensure_nodes_available(required: list[str], *, context: str) -> None:
 async def wait_for_output(
     prompt_id: str,
     client_id: str,
+    output_node_ids: list[str] | None = None,
     on_event: ProgressCallback | None = None,
 ) -> Path:
     """WebSocket으로 완료 대기 후 출력 파일 경로 반환."""
@@ -143,7 +151,11 @@ async def wait_for_output(
         res = await client.get(f"{COMFYUI_URL}/history/{prompt_id}", timeout=10)
         outputs = res.json().get(prompt_id, {}).get("outputs", {})
 
-    for node_out in outputs.values():
+    ordered_output_ids = output_node_ids or list(outputs.keys())
+    for node_id in ordered_output_ids:
+        node_out = outputs.get(str(node_id))
+        if not isinstance(node_out, dict):
+            continue
         items = (
             node_out.get("gifs")
             or node_out.get("videos")
@@ -163,13 +175,14 @@ async def wait_for_output(
 async def run_workflow(
     workflow: dict,
     kind: str = "video",
+    execution_targets: list[str] | None = None,
     on_event: ProgressCallback | None = None,
 ) -> Path:
     """워크플로우를 큐잉 → 완료 대기 → 모델/VRAM 해제 → 출력 경로 반환."""
     cid = str(uuid.uuid4())
-    pid = await queue_prompt(workflow, cid)
+    pid = await queue_prompt(workflow, cid, execution_targets=execution_targets)
     await _emit(on_event, {"type": "queued", "prompt_id": pid, "kind": kind})
-    out = await wait_for_output(pid, cid, on_event=on_event)
+    out = await wait_for_output(pid, cid, output_node_ids=execution_targets, on_event=on_event)
     await _emit(on_event, {"type": "output_ready", "prompt_id": pid, "kind": kind, "path": str(out)})
     # 다음 워크플로우가 로드되기 전에 현재 캐시된 모델을 해제해 OOM 방지.
     await free_memory()

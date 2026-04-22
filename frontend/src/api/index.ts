@@ -1,4 +1,4 @@
-import type { Character, DiffusionModelList, LoraEntry, Project, Scene } from "../types";
+import type { Character, DiffusionModelList, ImageModelList, LoraEntry, Project, Scene } from "../types";
 
 const BASE = "/api";
 
@@ -145,6 +145,10 @@ export const api = {
 
   diffusionModels: {
     list: () => request<DiffusionModelList>("/setup/diffusion_models"),
+  },
+
+  imageModels: {
+    list: () => request<ImageModelList>("/setup/image_models"),
   },
 
   setup: {

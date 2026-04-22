@@ -87,6 +87,55 @@ function Hf-Download {
     $script:FAILED.Add("$Repo/$PathInRepo") | Out-Null
 }
 
+function Hf-DownloadRevision {
+    param(
+        [string]$Repo,
+        [string]$Revision,
+        [string]$PathInRepo,
+        [string]$DestDir,
+        [string]$DestName = $null
+    )
+    if (-not $DestName) { $DestName = Split-Path -Leaf $PathInRepo }
+    $full = Join-Path $DestDir $DestName
+
+    if ($Mode -eq 'list') {
+        Write-Host ("  [HF@rev]  {0,-55}  <- {1}@{2}/{3}" -f $DestName, $Repo, $Revision, $PathInRepo)
+        return
+    }
+    New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+    if ((Test-Path $full) -and ((Get-Item $full).Length -gt 0)) {
+        $sizeMB = [math]::Round((Get-Item $full).Length / 1MB, 1)
+        Write-Host ("  [OK] {0,-55}  (이미 존재, {1} MB)" -f $DestName, $sizeMB)
+        return
+    }
+    $url = "https://huggingface.co/$Repo/resolve/$Revision/$PathInRepo"
+    Write-Host ("  [DL] {0,-55}  ({1}@{2})" -f $DestName, $Repo, $Revision)
+
+    $curlArgs = @(
+        "-L", "--fail", "--progress-bar",
+        "--retry", "5", "--retry-delay", "3", "--retry-all-errors",
+        "--connect-timeout", "30",
+        "-C", "-",
+        "-H", "User-Agent: myaniform/1.0",
+        "-o", "$full.part", $url
+    )
+    if ($env:HF_TOKEN) { $curlArgs = @("-H", "Authorization: Bearer $env:HF_TOKEN") + $curlArgs }
+
+    $attempt = 0
+    while ($attempt -lt 3) {
+        $attempt++
+        & $curlExe @curlArgs
+        if ($LASTEXITCODE -eq 0) {
+            Move-Item -Path "$full.part" -Destination $full -Force
+            return
+        }
+        Write-Host "    [warn] 시도 $attempt/3 실패, 재시도..."
+        Start-Sleep -Seconds 5
+    }
+    Write-Host "    [fail] 다운로드 최종 실패: $url"
+    $script:FAILED.Add("$Repo@$Revision/$PathInRepo") | Out-Null
+}
+
 function Civitai-Download {
     param(
         [string]$VersionId,
@@ -197,12 +246,25 @@ function Download-HF {
                 "$MODELS\loras" "vn_character_sheet_v4.safetensors"
     Hf-Download "MIUProject/VNCCS" "models/loras/DMD2/dmd2_sdxl_4step_lora_fp16.safetensors" `
                 "$MODELS\loras\DMD2" "dmd2_sdxl_4step_lora_fp16.safetensors"
+    Hf-Download "MIUProject/VNCCS" "models/loras/IL/mimimeter.safetensors" `
+                "$MODELS\loras\IL" "mimimeter.safetensors"
     Hf-Download "MIUProject/VNCCS" "models/controlnet/SDXL/IllustriousXL_openpose.safetensors" `
                 "$MODELS\controlnet\SDXL" "IllustriousXL_openpose.safetensors"
+    Hf-Download "MIUProject/VNCCS" "models/controlnet/SDXL/AnytestV4.safetensors" `
+                "$MODELS\controlnet\SDXL" "AnytestV4.safetensors"
     Hf-Download "MIUProject/VNCCS" "models/sams/sam_vit_b_01ec64.pth" `
                 "$MODELS\sams" "sam_vit_b_01ec64.pth"
+    Hf-Download "MIUProject/VNCCS" "models/upscale_models/2x_APISR_RRDB_GAN_generator.pth" `
+                "$MODELS\upscale_models" "2x_APISR_RRDB_GAN_generator.pth"
     Hf-Download "MIUProject/VNCCS" "models/upscale_models/4x_APISR_GRL_GAN_generator.pth" `
                 "$MODELS\upscale_models" "4x_APISR_GRL_GAN_generator.pth"
+
+    Write-Host ""
+    Write-Host "--- SeedVR2 업스케일 모델 ---"
+    Hf-Download "numz/SeedVR2_comfyUI" "seedvr2_ema_3b_fp16.safetensors" `
+                "$MODELS\SEEDVR2" "seedvr2_ema_3b_fp16.safetensors"
+    Hf-Download "numz/SeedVR2_comfyUI" "ema_vae_fp16.safetensors" `
+                "$MODELS\SEEDVR2" "ema_vae_fp16.safetensors"
 
     Write-Host ""
     Write-Host "--- FaceDetailer bbox ---"
@@ -222,6 +284,14 @@ function Download-HF {
     Write-Host ""
     Write-Host "--- SDXL VAE ---"
     Hf-Download "madebyollin/sdxl-vae-fp16-fix" "sdxl_vae.safetensors" "$MODELS\vae"
+
+    Write-Host ""
+    Write-Host "--- ILFlatMix 원본 체크포인트 (VN Step1) ---"
+    Hf-DownloadRevision "MIUProject/ILFlatMix" `
+        "143a907f20c1380658c5d6e9c768a2f3dc4c4874" `
+        "ILFlatMixV4_00001_.safetensors" `
+        "$MODELS\checkpoints\Illustrious" `
+        "ILFlatMix.safetensors"
 
     Write-Host ""
     Write-Host "--- SDXL Text Encoder ---"

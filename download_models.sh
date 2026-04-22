@@ -75,6 +75,51 @@ hf_dl() {
     return 0  # set -e 없지만 호출부 안전하게 0 반환 (실패는 배열로 추적)
 }
 
+hf_rev_dl() {
+    # hf_rev_dl <repo> <revision> <path-in-repo> <local_dir> [local_filename]
+    local repo="$1"
+    local revision="$2"
+    local path="$3"
+    local dest_dir="$4"
+    local dest_name="${5:-$(basename "$path")}"
+    local full="$dest_dir/$dest_name"
+
+    if [ "$MODE" = "--list" ]; then
+        printf "  [HF@rev]  %-55s  ← %s@%s/%s\n" "$dest_name" "$repo" "$revision" "$path"
+        return
+    fi
+    mkdir -p "$dest_dir"
+    if [ -s "$full" ]; then
+        printf "  ✓ %-55s  (이미 존재, %s)\n" "$dest_name" "$(du -h "$full" | cut -f1)"
+        return
+    fi
+    local url="https://huggingface.co/$repo/resolve/$revision/$path"
+    printf "  ↓ %-55s  (%s@%s)\n" "$dest_name" "$repo" "$revision"
+    local auth_args=()
+    [ -n "$HF_TOKEN" ] && auth_args+=(-H "Authorization: Bearer $HF_TOKEN")
+
+    local attempt=0
+    local max_attempts=3
+    while [ $attempt -lt $max_attempts ]; do
+        attempt=$((attempt + 1))
+        if curl -L --fail --progress-bar \
+            --retry 5 --retry-delay 3 --retry-all-errors \
+            --connect-timeout 30 \
+            -C - \
+            -H "User-Agent: myaniform/1.0" \
+            "${auth_args[@]}" \
+            -o "$full.part" "$url"; then
+            mv "$full.part" "$full"
+            return 0
+        fi
+        echo "    ⚠ 시도 $attempt/$max_attempts 실패, 재시도..."
+        sleep 5
+    done
+    echo "    ❌ 다운로드 최종 실패: $url"
+    FAILED_DOWNLOADS+=("$repo@$revision/$path")
+    return 0
+}
+
 civitai_dl() {
     # civitai_dl <version_id> <local_dir> <local_filename>
     local vid="$1"
@@ -188,12 +233,27 @@ download_hf() {
     # 포즈 제어용 ControlNet (Illustrious용)
     hf_dl "MIUProject/VNCCS" "models/controlnet/SDXL/IllustriousXL_openpose.safetensors" \
           "$MODELS/controlnet/SDXL" "IllustriousXL_openpose.safetensors"
+    hf_dl "MIUProject/VNCCS" "models/controlnet/SDXL/AnytestV4.safetensors" \
+          "$MODELS/controlnet/SDXL" "AnytestV4.safetensors"
+
+    # 원본 VN Step1 LoRA
+    hf_dl "MIUProject/VNCCS" "models/loras/IL/mimimeter.safetensors" \
+          "$MODELS/loras/IL" "mimimeter.safetensors"
 
     # SAM + APISR 업스케일러
     hf_dl "MIUProject/VNCCS" "models/sams/sam_vit_b_01ec64.pth" \
           "$MODELS/sams" "sam_vit_b_01ec64.pth"
+    hf_dl "MIUProject/VNCCS" "models/upscale_models/2x_APISR_RRDB_GAN_generator.pth" \
+          "$MODELS/upscale_models" "2x_APISR_RRDB_GAN_generator.pth"
     hf_dl "MIUProject/VNCCS" "models/upscale_models/4x_APISR_GRL_GAN_generator.pth" \
           "$MODELS/upscale_models" "4x_APISR_GRL_GAN_generator.pth"
+
+    echo ""
+    echo "━━━ SeedVR2 업스케일 모델 (원본 VN Step1 업스케일 체인) ━━━"
+    hf_dl "numz/SeedVR2_comfyUI" "seedvr2_ema_3b_fp16.safetensors" \
+          "$MODELS/SEEDVR2" "seedvr2_ema_3b_fp16.safetensors"
+    hf_dl "numz/SeedVR2_comfyUI" "ema_vae_fp16.safetensors" \
+          "$MODELS/SEEDVR2" "ema_vae_fp16.safetensors"
 
     echo ""
     echo "━━━ FaceDetailer bbox 모델 (얼굴 자동 리파인) ━━━━━━━━━━━━━"
@@ -216,6 +276,14 @@ download_hf() {
     echo ""
     echo "━━━ SDXL VAE (fp16 fix) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     hf_dl "madebyollin/sdxl-vae-fp16-fix" "sdxl_vae.safetensors"                     "$MODELS/vae"
+
+    echo ""
+    echo "━━━ ILFlatMix 원본 체크포인트 (VN Step1 원본 워크플로우) ━━━"
+    hf_rev_dl "MIUProject/ILFlatMix" \
+        "143a907f20c1380658c5d6e9c768a2f3dc4c4874" \
+        "ILFlatMixV4_00001_.safetensors" \
+        "$MODELS/checkpoints/Illustrious" \
+        "ILFlatMix.safetensors"
 
     echo ""
     echo "━━━ SDXL Text Encoder (CLIP G, 루프용 이미지 생성) ━━━━━━━━"

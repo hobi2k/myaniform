@@ -17,8 +17,6 @@ const ALL_WORKFLOWS: { name: string; label: string; group: string }[] = [
   { name: "ws_loop",          label: "루프 (I2V 2-stage)",  group: "씬" },
   { name: "ws_effect",        label: "이펙트 (I2V 2-stage)",group: "씬" },
   { name: "ws_scene_keyframe",label: "씬 키프레임",         group: "씬" },
-  { name: "ws_char_create",   label: "캐릭터 생성",         group: "캐릭터" },
-  { name: "ws_char_clone",    label: "캐릭터 클론",         group: "캐릭터" },
   { name: "ws_tts_clone",     label: "TTS 클론 (Qwen3)",    group: "TTS" },
   { name: "ws_tts_s2pro",     label: "TTS S2 Pro (Fish)",   group: "TTS" },
   { name: "ws_voice_design",  label: "보이스 디자인",       group: "TTS" },

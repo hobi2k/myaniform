@@ -1,12 +1,7 @@
 """워크플로우 JSON 동적 패칭.
 
-Phase 1~5 오버홀:
-  - patch_image 는 N-캐릭터, 해상도, 샘플러 파라미터, 워크플로우 선택을 지원.
-    * image_workflow="qwen_edit"  → ws_scene_keyframe.json (Qwen Edit 레퍼런스 일관성)
-    * image_workflow="sdxl"       → ws_image_sdxl.json (SDXL 고품질 + FaceDetailer)
-    * image_workflow="vnccs_sheet"→ ws_character_sheet.json (VNCCS 캐릭터 시트)
-  - 프롬프트 앵커링: "Picture 1 shows A. Picture 2 shows B. Together they ..."
-  - video 패처는 video_params (steps/cfg/sampler/frames/fps) 를 적용.
+- 원본 런타임 워크플로우만 사용한다.
+- 임의 축약/간이 워크플로우는 사용하지 않는다.
 """
 
 from __future__ import annotations
@@ -16,8 +11,24 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+from .ui_workflow_adapter import load_ui_workflow_as_api_prompt
+
 WORKFLOWS_DIR = Path(__file__).parent.parent.parent / "workflows"
 _COMFY_INPUT = Path(__file__).resolve().parent.parent.parent / "ComfyUI" / "input"
+_ORIGINAL_WORKFLOW_DIR = Path(
+    "/mnt/d/Stable Diffusion/StabilityMatrix-win-x64/Data/Packages/ComfyUI/user/default/workflows"
+)
+
+
+def _original_workflow_path(name: str, fallback: str | None = None) -> Path:
+    primary = _ORIGINAL_WORKFLOW_DIR / name
+    if primary.exists():
+        return primary
+    if fallback:
+        local = WORKFLOWS_DIR / fallback
+        if local.exists():
+            return local
+    raise FileNotFoundError(f"원본 워크플로우 파일을 찾을 수 없습니다: {name}")
 
 
 def _sanitize_workflow_graph(raw: dict) -> dict:
@@ -37,10 +48,38 @@ def _sanitize_workflow_graph(raw: dict) -> dict:
     return cleaned
 
 
+def _normalize_model_path_values(wf: dict) -> dict:
+    for node in wf.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        for key, value in list(inputs.items()):
+            if isinstance(value, str) and "\\" in value:
+                inputs[key] = value.replace("\\", "/")
+    return wf
+
+
+def _fill_known_required_defaults(wf: dict) -> dict:
+    for node in wf.values():
+        if not isinstance(node, dict):
+            continue
+        if node.get("class_type") == "UltimateSDUpscale":
+            node.setdefault("inputs", {}).setdefault("batch_size", 1)
+    return wf
+
+
 def load_workflow(name: str) -> dict:
     path = WORKFLOWS_DIR / name
     raw = json.loads(path.read_text(encoding="utf-8"))
     return _sanitize_workflow_graph(raw)
+
+
+def load_original_workflow(name: str, *, fallback: str | None = None) -> dict:
+    wf = load_ui_workflow_as_api_prompt(_original_workflow_path(name, fallback=fallback))
+    wf = _normalize_model_path_values(wf)
+    return _fill_known_required_defaults(wf)
 
 
 def _stage_ref(path: Optional[str], prefix: str) -> Optional[str]:
@@ -69,6 +108,23 @@ def _title(node: dict) -> str:
     return node.get("_meta", {}).get("title", "")
 
 
+def find_output_targets(
+    wf: dict,
+    *,
+    class_type: str = "SaveImage",
+    title_contains: str | None = None,
+) -> list[str]:
+    targets: list[str] = []
+    needle = title_contains.lower() if title_contains else None
+    for node_id, node in wf.items():
+        if node.get("class_type") != class_type:
+            continue
+        if needle and needle not in _title(node).lower():
+            continue
+        targets.append(str(node_id))
+    return targets
+
+
 def _loads(raw: Optional[str]) -> dict:
     if not raw:
         return {}
@@ -78,6 +134,34 @@ def _loads(raw: Optional[str]) -> dict:
         return {}
 
 
+def _apply_filename_prefixes(
+    wf: dict,
+    *,
+    default_prefix: str | None = None,
+    title_prefix_map: dict[str, str] | None = None,
+) -> None:
+    title_prefix_map = title_prefix_map or {}
+    normalized_map = {k.lower(): v for k, v in title_prefix_map.items()}
+    for node in _iter_nodes(wf):
+        inputs = node.setdefault("inputs", {})
+        title = _title(node).lower()
+        cls = node.get("class_type", "")
+        if cls == "VHS_VideoCombine":
+            if default_prefix:
+                inputs["filename_prefix"] = default_prefix
+                inputs.setdefault("save_output", True)
+            continue
+        if "filename_prefix" not in inputs:
+            continue
+        for needle, prefix in normalized_map.items():
+            if needle in title:
+                inputs["filename_prefix"] = prefix
+                break
+        else:
+            if default_prefix:
+                inputs["filename_prefix"] = default_prefix
+
+
 # ── 단계 1: TTS ────────────────────────────────────────────────────────
 
 def patch_voice(
@@ -85,6 +169,7 @@ def patch_voice(
     voice_sample: Optional[str],
     tts_engine: str,
     voice_design_text: Optional[str] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
     staged_voice = _stage_ref(voice_sample, "voicesample") if voice_sample else None
 
@@ -97,6 +182,7 @@ def patch_voice(
                 inp["audio"] = staged_voice
             elif cls == "FishS2VoiceCloneTTS":
                 inp["text"] = dialogue
+        _apply_filename_prefixes(wf, default_prefix=output_prefix)
         return wf
 
     if staged_voice and tts_engine == "qwen3":
@@ -108,6 +194,7 @@ def patch_voice(
                 inp["audio"] = staged_voice
             elif cls == "FL_Qwen3TTS_VoiceClone":
                 inp["text"] = dialogue
+        _apply_filename_prefixes(wf, default_prefix=output_prefix)
         return wf
 
     wf = load_workflow("ws_voice_design.json")
@@ -118,6 +205,7 @@ def patch_voice(
             inp["text"] = dialogue
             if voice_design_text:
                 inp["voice_description"] = voice_design_text
+    _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf
 
 
@@ -177,6 +265,11 @@ def _apply_image_params(wf: dict, params: dict, resolution: tuple[Optional[int],
                 inp["width"] = int(w)
             if h and "height" in inp:
                 inp["height"] = int(h)
+        if cls in ("VNCCSSheetManager",):
+            if w and "target_width" in inp:
+                inp["target_width"] = int(w)
+            if h and "target_height" in inp:
+                inp["target_height"] = int(h)
 
     # LoRA 스택 주입 — 선택된 항목만 앞 슬롯에 압축하고 빈 슬롯은 그래프에서 우회
     raw_loras = params.get("loras") or []
@@ -206,6 +299,18 @@ def _apply_image_params(wf: dict, params: dict, resolution: tuple[Optional[int],
                 elif value == [slot_id, 1]:
                     other_inputs[key] = [current_upstream, 1]
         wf.pop(slot_id, None)
+
+
+def _apply_image_model(wf: dict, model_name: Optional[str], *, qwen_only: bool = False) -> None:
+    if not model_name:
+        return
+    for node in _iter_nodes(wf):
+        cls = node.get("class_type", "")
+        inp = node.setdefault("inputs", {})
+        if cls == "CheckpointLoaderSimple" and not qwen_only and "ckpt_name" in inp:
+            inp["ckpt_name"] = model_name
+        elif cls in ("UnetLoaderGGUF", "UNETLoader") and "unet_name" in inp:
+            inp["unet_name"] = model_name
 
 
 def _inject_multi_loadimages(wf: dict, staged_refs: list[str]) -> None:
@@ -265,6 +370,7 @@ def patch_image(
     resolution: tuple[Optional[int], Optional[int]] = (None, None),
     params: Optional[dict] = None,
     negative_prompt: Optional[str] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
     """씬 키프레임 생성.
 
@@ -272,6 +378,7 @@ def patch_image(
     또는 구 시그니처 character_ref_a/b 사용 시 자동 변환.
     """
     params = params or {}
+    image_model = params.get("model")
 
     # 1. 구 시그니처 → 신규 포맷 변환
     refs: list[dict] = list(character_refs or [])
@@ -303,38 +410,47 @@ def patch_image(
 
     # 4. SDXL 워크플로우
     if wf_name == "sdxl":
-        wf = load_workflow("ws_image_sdxl.json")
+        wf = load_original_workflow("이미지 워크플로우.json")
         # Positive 텍스트 = 프롬프트 그대로 (레퍼런스 없이 설명으로만)
         for node in _iter_nodes(wf):
-            if node.get("class_type") == "CLIPTextEncode":
+            if node.get("class_type") in ("CLIPTextEncode", "DF_DynamicPrompts_Text_Box"):
                 t = _title(node)
-                if t == "Positive":
+                if t == "Positive" or "Positive Prompt" in t:
                     node.setdefault("inputs", {})["text"] = prompt or node["inputs"].get("text", "")
+                    node.setdefault("inputs", {})["Text"] = prompt or node["inputs"].get("Text", "")
                 elif t == "Negative" and negative_prompt is not None:
                     node.setdefault("inputs", {})["text"] = negative_prompt
+        for node in _iter_nodes(wf):
+            cls = node.get("class_type")
+            inp = node.setdefault("inputs", {})
+            if cls == "FaceDetailer":
+                if negative_prompt is not None and "negative" in inp and isinstance(inp["negative"], str):
+                    inp["negative"] = negative_prompt
+            elif cls == "LoadImage":
+                # 원본 워크플로우의 예제 레퍼런스 이미지는 런타임 씬 생성에서 사용하지 않는다.
+                if "image" in inp and not staged:
+                    inp.pop("image", None)
         _apply_image_params(wf, params, resolution)
-        # FaceDetailer on/off
-        if params.get("face_detailer") is False:
-            # SaveImage 입력을 VAEDecode 출력으로 직결
-            wf.get("70", {}).get("inputs", {})["images"] = ["40", 0]
-            wf.pop("60", None)
-            wf.pop("61", None)
-        elif params.get("hand_detailer") is False and "61" in wf:
-            wf.get("70", {}).get("inputs", {})["images"] = ["60", 0]
-            wf.pop("61", None)
+        _apply_image_model(wf, image_model)
+        _apply_filename_prefixes(wf, default_prefix=output_prefix)
         return wf
 
     # 5. VNCCS 캐릭터 시트
     if wf_name == "vnccs_sheet":
-        wf = load_workflow("ws_character_sheet.json")
-        for node in _iter_nodes(wf):
-            if node.get("class_type") in ("VNCCS_String", "CLIPTextEncode"):
-                title = _title(node)
-                if "Positive" in title or "positive" in title:
-                    node.setdefault("inputs", {})["text"] = prompt
-                elif ("Negative" in title or "negative" in title) and negative_prompt is not None:
-                    node.setdefault("inputs", {})["text"] = negative_prompt
+        wf = load_original_workflow(
+            "VN_Step1_QWEN_CharSheetGenerator_v1.json",
+            fallback="vnccs_step1_sheet_ui.json",
+        )
+        _apply_character_sheet_prompt(
+            wf,
+            character_name="",
+            description=prompt,
+            negative_prompt=negative_prompt,
+            params=params,
+        )
         _apply_image_params(wf, params, resolution)
+        _apply_image_model(wf, image_model)
+        _apply_filename_prefixes(wf, default_prefix=output_prefix)
         return wf
 
     # 6. Qwen Image Edit (기본, 레퍼런스 사용)
@@ -347,6 +463,8 @@ def patch_image(
         if "Positive" in _title(node) or "positive" in _title(node):
             node.setdefault("inputs", {})["prompt"] = prompt
     _apply_image_params(wf, params, resolution)
+    _apply_image_model(wf, image_model, qwen_only=True)
+    _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf
 
 
@@ -359,6 +477,7 @@ def patch_video_lipsync(
     sfx_prompt: str,
     diffusion_model: Optional[str] = None,
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
     wf = load_workflow("ws_lipsync.json")
     for node in _iter_nodes(wf):
@@ -378,6 +497,7 @@ def patch_video_lipsync(
             if sfx_prompt:
                 inp["prompt"] = sfx_prompt
     _apply_video_params(wf, params or {})
+    _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf
 
 
@@ -442,6 +562,7 @@ def _patch_2stage_video(
     loras_low: Optional[list[dict]],
     prompt_keywords: tuple[str, ...],
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
     if "10" in wf:
         _set_model_name(wf["10"], _I2V_MODELS["high"])
@@ -478,6 +599,7 @@ def _patch_2stage_video(
         _apply_loras_wrapper(wf["22"], loras_low if loras_low is not None else loras_high)
 
     _apply_video_params(wf, params or {})
+    _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf
 
 
@@ -490,11 +612,12 @@ def patch_video_loop(
     loras_low: Optional[list[dict]] = None,
     diffusion_model: Optional[str] = None,
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
-    wf = load_workflow("ws_loop.json")
+    wf = load_original_workflow("동영상 루프 워크플로우.json")
     return _patch_2stage_video(
         wf, image_path, image_path, bg_prompt, sfx_prompt,
-        loras, loras_low, ("Positive", "루프"), params,
+        loras, loras_low, ("Positive", "루프"), params, output_prefix,
     )
 
 
@@ -507,30 +630,47 @@ def patch_video_effect(
     loras_low: Optional[list[dict]] = None,
     diffusion_model: Optional[str] = None,
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
-    wf = load_workflow("ws_effect.json")
+    wf = load_original_workflow("동영상 첫끝프레임 워크플로우.json")
     return _patch_2stage_video(
         wf, image_path, end_image_path, effect_prompt, sfx_prompt,
-        loras, loras_low, ("Positive", "이펙트"), params,
+        loras, loras_low, ("Positive", "이펙트"), params, output_prefix,
     )
 
 
 # ── 보조 ─────────────────────────────────────────────────────────────────
 
 def patch_char_generate(
+    character_name: str,
     description: str,
     negative_prompt: Optional[str] = None,
     resolution: tuple[Optional[int], Optional[int]] = (None, None),
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
-    """캐릭터 첫 이미지 — SDXL 워크플로우로 고품질 생성."""
-    return patch_image(
-        description,
-        workflow="sdxl",
-        resolution=resolution,
-        params=params,
-        negative_prompt=negative_prompt,
+    wf = load_original_workflow(
+        "VN_Step1_QWEN_CharSheetGenerator_v1.json",
+        fallback="vnccs_step1_sheet_ui.json",
     )
+    _apply_character_sheet_prompt(
+        wf,
+        character_name=character_name,
+        description=description,
+        negative_prompt=negative_prompt,
+        params=params or {},
+    )
+    _apply_image_params(wf, params or {}, resolution)
+    _apply_image_model(wf, (params or {}).get("model"))
+    _apply_filename_prefixes(
+        wf,
+        default_prefix=output_prefix,
+        title_prefix_map={
+            "faces": f"{output_prefix}_faces" if output_prefix else "",
+            "chracter sheet": output_prefix or "",
+        },
+    )
+    return wf
 
 
 def patch_character_sheet(
@@ -539,31 +679,56 @@ def patch_character_sheet(
     negative_prompt: Optional[str] = None,
     resolution: tuple[Optional[int], Optional[int]] = (None, None),
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
-    """Phase 4: VNCCS 캐릭터 시트 (정면/후면/측면).
-    ws_character_sheet.json 이 있을 때만 동작."""
-    try:
-        wf = load_workflow("ws_character_sheet.json")
-    except FileNotFoundError:
-        # 폴백: SDXL 로 정면 이미지만 생성
-        return patch_image(
-            description,
-            workflow="sdxl",
-            resolution=resolution,
-            params=params,
-            negative_prompt=negative_prompt,
-        )
-    for node in _iter_nodes(wf):
-        cls = node.get("class_type", "")
-        inp = node.setdefault("inputs", {})
-        t = _title(node)
-        if cls in ("VNCCS_String", "CLIPTextEncode") and ("Positive" in t or "Character" in t or "설명" in t):
-            inp["text" if "text" in inp else "prompt"] = description
-        elif cls in ("VNCCS_String", "CLIPTextEncode") and ("Negative" in t or "negative" in t):
-            if negative_prompt is not None:
-                inp["text" if "text" in inp else "prompt"] = negative_prompt
+    wf = load_original_workflow(
+        "VN_Step1_QWEN_CharSheetGenerator_v1.json",
+        fallback="vnccs_step1_sheet_ui.json",
+    )
+    _apply_character_sheet_prompt(
+        wf,
+        character_name=character_name,
+        description=description,
+        negative_prompt=negative_prompt,
+        params=params or {},
+    )
     _apply_image_params(wf, params or {}, resolution)
+    _apply_image_model(wf, (params or {}).get("model"))
+    _apply_filename_prefixes(
+        wf,
+        default_prefix=output_prefix,
+        title_prefix_map={
+            "faces": f"{output_prefix}_faces" if output_prefix else "",
+            "chracter sheet": output_prefix or "",
+        },
+    )
     return wf
+
+
+def _apply_character_sheet_prompt(
+    wf: dict,
+    *,
+    character_name: str,
+    description: str,
+    negative_prompt: Optional[str],
+    params: dict,
+) -> None:
+    for node in _iter_nodes(wf):
+        if node.get("class_type") != "CharacterCreator":
+            continue
+        inp = node.setdefault("inputs", {})
+        base_negative = str(inp.get("negative_prompt", "") or "")
+        if character_name:
+            inp["existing_character"] = "None"
+            inp["new_character_name"] = character_name
+        if description:
+            inp["additional_details"] = description
+        if negative_prompt:
+            merged = ", ".join(x for x in [base_negative, negative_prompt] if x)
+            inp["negative_prompt"] = merged
+        if "seed" in params:
+            inp["seed"] = int(params["seed"])
+        return
 
 
 def patch_voice_design(
@@ -571,6 +736,7 @@ def patch_voice_design(
     sample_text: str = "안녕하세요.",
     language: Optional[str] = None,
     params: Optional[dict] = None,
+    output_prefix: Optional[str] = None,
 ) -> dict:
     params = params or {}
     wf = load_workflow("ws_voice_design.json")
@@ -592,4 +758,5 @@ def patch_voice_design(
             }.items():
                 if src in params:
                     inp[dst] = params[src]
+    _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf

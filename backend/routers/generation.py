@@ -149,6 +149,7 @@ async def start_generation(
                             voice_sample=char.voice_sample_path if char else None,
                             tts_engine=scene.tts_engine.value,
                             voice_design_text=char.voice_design if char else None,
+                            output_prefix=f"projects/{project_id}/scenes/{scene.id}/voice",
                         )
                         out = await comfy.run_workflow(wf, kind="audio")
                         staged = _stage_into_input(out, f"scene_voice_{scene.id}")
@@ -179,6 +180,7 @@ async def start_generation(
                             workflow=scene.image_workflow,
                             resolution=(scene.resolution_w, scene.resolution_h),
                             params=_parse_json(scene.image_params),
+                            output_prefix=f"projects/{project_id}/scenes/{scene.id}/image",
                         )
                         out = await comfy.run_workflow(wf, kind="image")
                         staged = _stage_into_input(out, f"scene_image_{scene.id}")
@@ -203,6 +205,7 @@ async def start_generation(
                             sfx_prompt=scene.sfx_prompt or "ambient",
                             diffusion_model=scene.diffusion_model,
                             params=video_params,
+                            output_prefix=f"projects/{project_id}/scenes/{scene.id}/video",
                         )
                     elif scene.type == SceneType.loop:
                         if not image_path:
@@ -214,6 +217,7 @@ async def start_generation(
                             loras=_parse_loras(scene.loras_json),
                             diffusion_model=scene.diffusion_model,
                             params=video_params,
+                            output_prefix=f"projects/{project_id}/scenes/{scene.id}/video",
                         )
                     elif scene.type == SceneType.effect:
                         if not image_path:
@@ -225,6 +229,7 @@ async def start_generation(
                             loras=_parse_loras(scene.loras_json),
                             diffusion_model=scene.diffusion_model,
                             params=video_params,
+                            output_prefix=f"projects/{project_id}/scenes/{scene.id}/video",
                         )
                     else:
                         raise RuntimeError(f"알 수 없는 씬 타입: {scene.type}")

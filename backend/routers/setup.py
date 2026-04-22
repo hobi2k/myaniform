@@ -77,17 +77,27 @@ def list_loras():
     return {"loras": items}
 
 
-def _scan_models(subdir: str, extensions: tuple[str, ...] = (".safetensors", ".gguf")) -> list[dict]:
-    """모델 파일 스캔. name 은 diffusion_models/ 기준 상대 경로 (UNETLoader.unet_name 호환)."""
+def _scan_models(
+    subdir: str,
+    extensions: tuple[str, ...] = (".safetensors", ".gguf"),
+    relative_to: str | None = None,
+) -> list[dict]:
+    """모델 파일 스캔.
+
+    relative_to 를 주면 해당 디렉토리 기준 상대 경로를 반환한다.
+    예:
+    - checkpoints => CheckpointLoaderSimple.ckpt_name 호환
+    - unet => UnetLoaderGGUF.unet_name 호환
+    - diffusion_models => UNETLoader.unet_name 호환
+    """
     root = _MODELS / subdir
-    diff_root = _MODELS / "diffusion_models"
+    rel_root = _MODELS / relative_to if relative_to else root
     if not root.exists():
         return []
     items = []
     for p in sorted(root.rglob("*")):
         if p.suffix.lower() in extensions and p.is_file():
-            # UNETLoader expects path relative to models/diffusion_models/
-            rel = p.relative_to(diff_root).as_posix() if str(p).startswith(str(diff_root)) else p.relative_to(_MODELS).as_posix()
+            rel = p.relative_to(rel_root).as_posix()
             items.append({
                 "name": rel,
                 "filename": p.name,
@@ -100,9 +110,22 @@ def _scan_models(subdir: str, extensions: tuple[str, ...] = (".safetensors", ".g
 def list_diffusion_models():
     """I2V / S2V 디퓨전 모델 목록 — 씬별 모델 선택용."""
     return {
-        "i2v_high": _scan_models("diffusion_models/wan_i2v_high"),
-        "i2v_low": _scan_models("diffusion_models/wan_i2v_low"),
-        "s2v": _scan_models("diffusion_models/wan_s2v"),
+        "i2v_high": _scan_models("diffusion_models/wan_i2v_high", relative_to="diffusion_models"),
+        "i2v_low": _scan_models("diffusion_models/wan_i2v_low", relative_to="diffusion_models"),
+        "s2v": _scan_models("diffusion_models/wan_s2v", relative_to="diffusion_models"),
+    }
+
+
+@router.get("/image_models")
+def list_image_models():
+    """이미지 생성용 모델 목록.
+
+    - checkpoints: SDXL / 캐릭터 시트 계열 CheckpointLoaderSimple.ckpt_name
+    - qwen_edit: Qwen Edit 계열 UnetLoaderGGUF.unet_name
+    """
+    return {
+        "checkpoints": _scan_models("checkpoints", extensions=(".safetensors", ".ckpt", ".pt"), relative_to="checkpoints"),
+        "qwen_edit": _scan_models("unet", relative_to="unet"),
     }
 
 
