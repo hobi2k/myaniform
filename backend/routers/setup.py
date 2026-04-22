@@ -4,11 +4,13 @@
 """
 from pathlib import Path
 from fastapi import APIRouter
+import httpx
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
 # ComfyUI models 루트 (backend는 myaniform/backend/ 에서 실행)
 _MODELS = Path(__file__).resolve().parents[2] / "ComfyUI" / "models"
+_COMFYUI_URL = "http://127.0.0.1:8188"
 
 
 def _any(*patterns: str) -> bool:
@@ -102,3 +104,19 @@ def list_diffusion_models():
         "i2v_low": _scan_models("diffusion_models/wan_i2v_low"),
         "s2v": _scan_models("diffusion_models/wan_s2v"),
     }
+
+
+@router.get("/comfy_status")
+async def comfy_status():
+    """ComfyUI 연결 상태 및 간단한 진단."""
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(f"{_COMFYUI_URL}/system_stats", timeout=3)
+            res.raise_for_status()
+        return {"online": True, "url": _COMFYUI_URL}
+    except Exception as exc:
+        return {
+            "online": False,
+            "url": _COMFYUI_URL,
+            "detail": str(exc),
+        }

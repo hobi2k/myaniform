@@ -178,18 +178,34 @@ def _apply_image_params(wf: dict, params: dict, resolution: tuple[Optional[int],
             if h and "height" in inp:
                 inp["height"] = int(h)
 
-    # LoRA 스택 주입 — node id "2","3","4" 를 LoRA 슬롯으로 사용 (ws_image_sdxl.json 규약)
-    loras = params.get("loras") or []
-    for i, slot_id in enumerate(("2", "3", "4")):
-        if slot_id not in wf or wf[slot_id].get("class_type") != "LoraLoader":
+    # LoRA 스택 주입 — 선택된 항목만 앞 슬롯에 압축하고 빈 슬롯은 그래프에서 우회
+    raw_loras = params.get("loras") or []
+    loras = [l for l in raw_loras if (l or {}).get("name") not in (None, "", "None")]
+    slot_ids = ("2", "3", "4")
+    current_upstream = "1"
+    for i, slot_id in enumerate(slot_ids):
+        node = wf.get(slot_id)
+        if not node or node.get("class_type") != "LoraLoader":
             continue
-        inp = wf[slot_id].setdefault("inputs", {})
+        inp = node.setdefault("inputs", {})
         if i < len(loras):
-            inp["lora_name"] = loras[i].get("name") or "None"
+            inp["model"] = [current_upstream, 0]
+            inp["clip"] = [current_upstream, 1]
+            inp["lora_name"] = loras[i]["name"]
             inp["strength_model"] = float(loras[i].get("strength", 1.0))
             inp["strength_clip"] = float(loras[i].get("strength", 1.0))
-        else:
-            inp["lora_name"] = "None"
+            current_upstream = slot_id
+            continue
+
+        # 남은 슬롯은 아예 우회해서 invalid lora_name 검증을 피한다.
+        for other in _iter_nodes(wf):
+            other_inputs = other.get("inputs", {})
+            for key, value in list(other_inputs.items()):
+                if value == [slot_id, 0]:
+                    other_inputs[key] = [current_upstream, 0]
+                elif value == [slot_id, 1]:
+                    other_inputs[key] = [current_upstream, 1]
+        wf.pop(slot_id, None)
 
 
 def _inject_multi_loadimages(wf: dict, staged_refs: list[str]) -> None:

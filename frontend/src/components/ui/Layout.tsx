@@ -1,7 +1,15 @@
+import { useQuery } from "@tanstack/react-query";
 import { Clapperboard } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
+import { api } from "../../api";
 
 export default function Layout() {
+  const { data: comfyStatus } = useQuery({
+    queryKey: ["comfy-status"],
+    queryFn: () => api.setup.comfyStatus(),
+    refetchInterval: 5000,
+  });
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-surface-raised/80 backdrop-blur-md border-b border-white/5 px-6 py-3 flex items-center gap-3 sticky top-0 z-40">
@@ -19,13 +27,25 @@ export default function Layout() {
         <span className="text-[11px] text-gray-500 ml-1 hidden sm:inline">
           애니풍 멀티샷 제작 스튜디오
         </span>
+        <span
+          className={`text-[10px] px-2 py-0.5 rounded-full border ${
+            comfyStatus?.online
+              ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+              : "text-red-300 border-red-500/30 bg-red-500/10"
+          }`}
+          title={comfyStatus?.online ? "ComfyUI 연결됨" : comfyStatus?.detail ?? "ComfyUI 연결 안 됨"}
+        >
+          {comfyStatus?.online ? "ComfyUI ON" : "ComfyUI OFF"}
+        </span>
         <div className="flex-1" />
-        <Link
-          to="/workflows"
+        <a
+          href="/workflows"
+          target="_blank"
+          rel="noreferrer"
           className="text-[11px] text-gray-500 hover:text-accent transition-colors"
         >
-          워크플로우
-        </Link>
+          워크플로우 ↗
+        </a>
         <a
           href="http://127.0.0.1:8188"
           target="_blank"

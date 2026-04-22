@@ -146,4 +146,9 @@ export const api = {
   diffusionModels: {
     list: () => request<DiffusionModelList>("/setup/diffusion_models"),
   },
+
+  setup: {
+    comfyStatus: () =>
+      request<{ online: boolean; url: string; detail?: string }>("/setup/comfy_status"),
+  },
 };

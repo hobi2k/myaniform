@@ -10,16 +10,34 @@ from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import Character, CharacterCreate, CharacterRead, TTSEngine
-from ..services.comfyui_client import run_workflow
+from ..services.comfyui_client import ensure_nodes_available, run_workflow
 from ..services.workflow_patcher import patch_char_generate, patch_character_sheet, patch_voice_design
 
 UPLOAD_DIR = Path("uploads")
 VOICES_DIR = Path("voices")
+MODELS_DIR = Path(__file__).resolve().parents[2] / "ComfyUI" / "models"
 UPLOAD_DIR.mkdir(exist_ok=True)
 VOICES_DIR.mkdir(exist_ok=True)
 
 router = APIRouter(prefix="/projects/{project_id}/characters", tags=["characters"])
 logger = logging.getLogger("myaniform.characters")
+_CHAR_IMAGE_REQUIRED_NODES = [
+    "CheckpointLoaderSimple",
+    "CLIPTextEncode",
+    "EmptyLatentImage",
+    "KSampler",
+    "VAEDecode",
+    "SaveImage",
+    "LoraLoader",
+    "UltralyticsDetectorProvider",
+    "SAMLoader",
+    "FaceDetailer",
+]
+_CHAR_IMAGE_REQUIRED_MODELS = [
+    MODELS_DIR / "sams" / "sam_vit_b_01ec64.pth",
+    MODELS_DIR / "ultralytics" / "bbox" / "face_yolov8m.pt",
+    MODELS_DIR / "ultralytics" / "bbox" / "hand_yolov8s.pt",
+]
 
 
 def _parse_json(raw: str | None) -> dict:
@@ -36,6 +54,15 @@ def _get_char(project_id: str, char_id: str, session: Session) -> Character:
     if not c or c.project_id != project_id:
         raise HTTPException(404, "캐릭터를 찾을 수 없습니다.")
     return c
+
+
+def _ensure_char_image_models(context: str) -> None:
+    missing = [str(path.relative_to(MODELS_DIR)) for path in _CHAR_IMAGE_REQUIRED_MODELS if not path.exists()]
+    if missing:
+        raise HTTPException(
+            400,
+            f"{context}에 필요한 ComfyUI 모델 파일이 없습니다: {', '.join(missing)}",
+        )
 
 
 def _sse(payload: dict) -> str:
@@ -243,6 +270,8 @@ async def generate_image(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다. 캐릭터 설명을 먼저 입력하세요.")
+    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 이미지 생성")
+    _ensure_char_image_models("캐릭터 이미지 생성")
 
     wf = patch_char_generate(
         char.description,
@@ -270,6 +299,8 @@ async def generate_image_stream(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다. 캐릭터 설명을 먼저 입력하세요.")
+    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 이미지 생성")
+    _ensure_char_image_models("캐릭터 이미지 생성")
 
     wf = patch_char_generate(
         char.description,
@@ -310,6 +341,8 @@ async def generate_sheet(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다.")
+    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 시트 생성")
+    _ensure_char_image_models("캐릭터 시트 생성")
     wf = patch_character_sheet(
         char.name,
         char.description,
@@ -336,6 +369,8 @@ async def generate_sheet_stream(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다.")
+    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 시트 생성")
+    _ensure_char_image_models("캐릭터 시트 생성")
     wf = patch_character_sheet(
         char.name,
         char.description,

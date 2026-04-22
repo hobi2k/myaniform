@@ -42,6 +42,35 @@ async def queue_prompt(workflow: dict, client_id: str) -> str:
         return res.json()["prompt_id"]
 
 
+async def get_registered_nodes() -> set[str]:
+    """현재 ComfyUI가 인식 중인 노드 class_type 목록."""
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"{COMFYUI_URL}/object_info", timeout=10)
+        res.raise_for_status()
+        data = res.json()
+    if not isinstance(data, dict):
+        return set()
+    return set(data.keys())
+
+
+async def ensure_nodes_available(required: list[str], *, context: str) -> None:
+    """필수 노드가 빠져 있으면 실행 전에 명확한 오류를 낸다."""
+    try:
+        registered = await get_registered_nodes()
+    except Exception as exc:
+        raise RuntimeError(
+            f"ComfyUI 노드 목록을 확인할 수 없습니다 ({context}). "
+            f"ComfyUI 서버 상태를 먼저 확인하세요: {exc}"
+        ) from exc
+
+    missing = [name for name in required if name not in registered]
+    if missing:
+        raise RuntimeError(
+            f"{context}에 필요한 ComfyUI 노드가 로드되지 않았습니다: {', '.join(missing)}. "
+            "ComfyUI가 해당 custom_nodes를 정상 로드했는지 확인 후 다시 시도하세요."
+        )
+
+
 async def wait_for_output(
     prompt_id: str,
     client_id: str,

@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { api } from "../api";
 
 // scene.type → 워크플로우 매핑 (backend/routers/workflows.py 와 동기)
 const SCENE_TYPE_WORKFLOW: Record<string, string> = {
@@ -27,6 +29,11 @@ const COMFYUI = "http://127.0.0.1:8188";
 
 export default function WorkflowViewerPage() {
   const [params, setParams] = useSearchParams();
+  const { data: comfyStatus, isLoading: comfyStatusLoading } = useQuery({
+    queryKey: ["comfy-status"],
+    queryFn: () => api.setup.comfyStatus(),
+    refetchInterval: 5000,
+  });
 
   const initial = useMemo(() => {
     const raw = params.get("workflow") ?? params.get("type");
@@ -83,17 +90,39 @@ export default function WorkflowViewerPage() {
         </a>
       </div>
       <div className="relative flex-1">
-        <iframe
-          src={iframeSrc}
-          title="ComfyUI"
-          className="flex-1 w-full h-full border-0"
-          allow="clipboard-read; clipboard-write"
-          onLoad={() => {
-            setLoading(false);
-            setTimedOut(false);
-          }}
-        />
-        {loading && (
+        {comfyStatus?.online && (
+          <iframe
+            src={iframeSrc}
+            title="ComfyUI"
+            className="flex-1 w-full h-full border-0"
+            allow="clipboard-read; clipboard-write"
+            onLoad={() => {
+              setLoading(false);
+              setTimedOut(false);
+            }}
+          />
+        )}
+        {(!comfyStatus?.online && !comfyStatusLoading) ? (
+          <div className="absolute inset-0 grid place-items-center bg-bg/92">
+            <div className="max-w-lg rounded-2xl border border-red-500/30 bg-surface-raised/95 p-6 text-center shadow-card">
+              <p className="text-base font-semibold text-white mb-2">ComfyUI가 현재 열려 있지 않습니다</p>
+              <p className="text-sm text-gray-400 mb-3">
+                그래서 상단 `워크플로우` 버튼을 눌러도 iframe 안에 아무 것도 뜨지 않습니다.
+              </p>
+              <p className="text-xs text-red-300 break-all">
+                {comfyStatus?.detail ?? "127.0.0.1:8188 연결 실패"}
+              </p>
+              <a
+                href={COMFYUI}
+                target="_self"
+                rel="noreferrer"
+                className="inline-flex mt-4 text-sm text-accent hover:underline"
+              >
+                ComfyUI 주소로 이동
+              </a>
+            </div>
+          </div>
+        ) : loading && comfyStatus?.online && (
           <div className="absolute inset-0 grid place-items-center bg-bg/85 backdrop-blur-sm">
             <div className="max-w-md rounded-2xl border border-white/10 bg-surface-raised/90 p-5 text-center shadow-card">
               <p className="text-sm font-medium text-white mb-1">워크플로우 로딩 중</p>
