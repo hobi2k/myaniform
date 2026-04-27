@@ -4,17 +4,22 @@ import logging
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import Character, CharacterCreate, CharacterRead, TTSEngine
 from ..services.comfyui_client import ensure_nodes_available, run_workflow
+from ..services.model_catalog import (
+    CHARACTER_IMAGE_REQUIRED_MODEL_PATHS,
+)
 from ..services.workflow_patcher import (
+    build_multi_ref_prompt,
     find_output_targets,
-    patch_char_generate,
+    patch_image,
     patch_character_sheet,
+    patch_character_sprite_existing,
     patch_voice_design,
 )
 
@@ -31,17 +36,22 @@ _CHAR_IMAGE_REQUIRED_NODES = [
     "CLIPTextEncode",
     "EmptyLatentImage",
     "KSampler",
+    "KSamplerAdvanced",
     "VAEDecode",
     "SaveImage",
     "LoraLoader",
+    "LoadImage",
+    "CLIPLoader",
+    "VAELoader",
+    "UnetLoaderGGUF",
+    "TextEncodeQwenImageEditPlus",
+    "EmptyQwenImageLayeredLatentImage",
     "UltralyticsDetectorProvider",
     "SAMLoader",
     "FaceDetailer",
 ]
 _CHAR_IMAGE_REQUIRED_MODELS = [
-    MODELS_DIR / "sams" / "sam_vit_b_01ec64.pth",
-    MODELS_DIR / "ultralytics" / "bbox" / "face_yolov8m.pt",
-    MODELS_DIR / "ultralytics" / "bbox" / "hand_yolov8s.pt",
+    MODELS_DIR / model_path for model_path in CHARACTER_IMAGE_REQUIRED_MODEL_PATHS
 ]
 
 
@@ -61,6 +71,23 @@ def _get_char(project_id: str, char_id: str, session: Session) -> Character:
     return c
 
 
+def _character_workflow_fields(char: Character) -> dict:
+    return {
+        "background_color": char.background_color,
+        "aesthetics": char.aesthetics,
+        "nsfw": char.nsfw,
+        "sex": char.sex,
+        "age": char.age,
+        "race": char.race,
+        "eyes": char.eyes,
+        "hair": char.hair,
+        "face": char.face,
+        "body": char.body,
+        "skin_color": char.skin_color,
+        "lora_prompt": char.lora_prompt,
+    }
+
+
 def _ensure_char_image_models(context: str) -> None:
     missing = [str(path.relative_to(MODELS_DIR)) for path in _CHAR_IMAGE_REQUIRED_MODELS if not path.exists()]
     if missing:
@@ -68,6 +95,42 @@ def _ensure_char_image_models(context: str) -> None:
             400,
             f"{context}에 필요한 ComfyUI 모델 파일이 없습니다: {', '.join(missing)}",
         )
+
+
+def _build_sprite_workflow(char: Character, project_id: str, char_id: str, mode: str) -> tuple[dict, list[str] | None]:
+    """Build the exact VN Step1/Step1.1 sprite workflow selected by the UI."""
+    selected_mode = mode.lower()
+    if selected_mode not in {"auto", "new", "reference"}:
+        raise HTTPException(400, "sprite mode는 auto, new, reference 중 하나여야 합니다.")
+
+    output_prefix = f"projects/{project_id}/characters/{char_id}/sprite"
+    common = {
+        "negative_prompt": char.negative_prompt,
+        "resolution": (char.resolution_w, char.resolution_h),
+        "params": _parse_json(char.sprite_params),
+        "character_fields": _character_workflow_fields(char),
+        "output_prefix": output_prefix,
+    }
+
+    if selected_mode == "new":
+        wf = patch_character_sheet(char.name, char.description or "", **common)
+        return wf, find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+
+    reference_image_path = char.image_path if selected_mode == "reference" else (char.image_path or char.sprite_path)
+    if reference_image_path:
+        wf = patch_character_sprite_existing(
+            character_name=char.name,
+            description=char.description or "",
+            reference_image_path=reference_image_path,
+            **common,
+        )
+        return wf, find_output_targets(wf, title_contains="refined faces character sheet") or find_output_targets(wf)
+
+    if selected_mode == "reference":
+        raise HTTPException(400, "참조 이미지 기반 스프라이트 생성에는 먼저 참조 이미지를 업로드해야 합니다.")
+
+    wf = patch_character_sheet(char.name, char.description or "", **common)
+    return wf, find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
 
 
 def _sse(payload: dict) -> str:
@@ -249,15 +312,16 @@ def delete_character(project_id: str, char_id: str, session: Session = Depends(g
     session.commit()
 
 
-# ── 이미지 업로드 ─────────────────────────────────────────────────────────
+# ── 스프라이트 참조 이미지 업로드 ─────────────────────────────────────────
 
-@router.post("/{char_id}/image/upload", response_model=CharacterRead)
-async def upload_image(
+@router.post("/{char_id}/reference/upload", response_model=CharacterRead)
+async def upload_reference_image(
     project_id: str,
     char_id: str,
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ):
+    """VN Step1.1 스프라이트 복제 생성에 사용할 참조 이미지를 업로드한다."""
     char = _get_char(project_id, char_id, session)
     ext = Path(file.filename).suffix or ".png"
     dest = UPLOAD_DIR / f"{char_id}{ext}"
@@ -271,9 +335,6 @@ async def upload_image(
 
 
 # ── 이미지 AI 생성 ────────────────────────────────────────────────────────
-#
-# 캐릭터 기본 생성은 "대표 얼굴샷"보다 "전체샷/시트 기반 참조 자산"이 중요하므로
-# 생성 결과를 image_path 와 sheet_path 양쪽에 함께 저장한다.
 
 @router.post("/{char_id}/image/generate", response_model=CharacterRead)
 async def generate_image(
@@ -284,24 +345,31 @@ async def generate_image(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다. 캐릭터 설명을 먼저 입력하세요.")
+    if not char.sprite_path:
+        raise HTTPException(400, "캐릭터 이미지는 먼저 캐릭터 스프라이트를 생성한 뒤 만들 수 있습니다.")
     await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 이미지 생성")
     _ensure_char_image_models("캐릭터 이미지 생성")
 
-    wf = patch_char_generate(
-        char.name or char.id,
-        char.description,
+    prompt = build_multi_ref_prompt([(char.name, char.description or "")], char.description or "")
+    wf = patch_image(
+        prompt=prompt,
+        character_refs=[{
+            "name": char.name,
+            "description": char.description or "",
+            "image_path": char.sprite_path,
+        }],
+        workflow="qwen_edit",
         negative_prompt=char.negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
         params=_parse_json(char.image_params),
         output_prefix=f"projects/{project_id}/characters/{char_id}/image",
     )
-    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+    output_targets = find_output_targets(wf)
     output = await run_workflow(wf, kind="image", execution_targets=output_targets)
 
     dest = UPLOAD_DIR / f"{char_id}_generated.png"
     shutil.copy(output, dest)
     char.image_path = str(dest)
-    char.sheet_path = str(dest)
     session.add(char)
     session.commit()
     session.refresh(char)
@@ -317,24 +385,31 @@ async def generate_image_stream(
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다. 캐릭터 설명을 먼저 입력하세요.")
+    if not char.sprite_path:
+        raise HTTPException(400, "캐릭터 이미지는 먼저 캐릭터 스프라이트를 생성한 뒤 만들 수 있습니다.")
     await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 이미지 생성")
     _ensure_char_image_models("캐릭터 이미지 생성")
 
-    wf = patch_char_generate(
-        char.name or char.id,
-        char.description,
+    prompt = build_multi_ref_prompt([(char.name, char.description or "")], char.description or "")
+    wf = patch_image(
+        prompt=prompt,
+        character_refs=[{
+            "name": char.name,
+            "description": char.description or "",
+            "image_path": char.sprite_path,
+        }],
+        workflow="qwen_edit",
         negative_prompt=char.negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
         params=_parse_json(char.image_params),
         output_prefix=f"projects/{project_id}/characters/{char_id}/image",
     )
-    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+    output_targets = find_output_targets(wf)
 
     def persist(output: Path) -> Character:
         dest = UPLOAD_DIR / f"{char_id}_generated.png"
         shutil.copy(output, dest)
         char.image_path = str(dest)
-        char.sheet_path = str(dest)
         return char
 
     return await _run_character_workflow_stream(
@@ -348,67 +423,50 @@ async def generate_image_stream(
     )
 
 
-# ── Phase 4: VNCCS 캐릭터 시트 / 스프라이트 ──────────────────────────────
+# ── VNCCS 캐릭터 스프라이트 ──────────────────────────────────────────────
 
-@router.post("/{char_id}/sheet/generate", response_model=CharacterRead)
-async def generate_sheet(
+@router.post("/{char_id}/sprite/generate", response_model=CharacterRead)
+async def generate_sprite(
     project_id: str,
     char_id: str,
+    mode: str = Query("auto"),
     session: Session = Depends(get_session),
 ):
-    """캐릭터 시트 생성.
-
-    축약 워크플로우는 제거되었고, 원본 VN Step1 자동화 경로만 허용한다.
-    """
+    """캐릭터 스프라이트 생성. new=Step1, reference=Step1.1, auto=참조 우선."""
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다.")
-    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 시트 생성")
-    _ensure_char_image_models("캐릭터 시트 생성")
-    wf = patch_character_sheet(
-        char.name,
-        char.description,
-        negative_prompt=char.negative_prompt,
-        resolution=(char.resolution_w, char.resolution_h),
-        params=_parse_json(char.image_params),
-        output_prefix=f"projects/{project_id}/characters/{char_id}/sheet",
-    )
-    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 스프라이트 생성")
+    _ensure_char_image_models("캐릭터 스프라이트 생성")
+    wf, output_targets = _build_sprite_workflow(char, project_id, char_id, mode)
     output = await run_workflow(wf, kind="image", execution_targets=output_targets)
-    dest = UPLOAD_DIR / f"{char_id}_sheet.png"
+    dest = UPLOAD_DIR / f"{char_id}_sprite.png"
     shutil.copy(output, dest)
-    char.sheet_path = str(dest)
+    char.sprite_path = str(dest)
     session.add(char)
     session.commit()
     session.refresh(char)
     return char
 
 
-@router.post("/{char_id}/sheet/generate/stream")
-async def generate_sheet_stream(
+@router.post("/{char_id}/sprite/generate/stream")
+async def generate_sprite_stream(
     project_id: str,
     char_id: str,
+    mode: str = Query("auto"),
     session: Session = Depends(get_session),
 ):
     char = _get_char(project_id, char_id, session)
     if not char.description:
         raise HTTPException(400, "description이 없습니다.")
-    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 시트 생성")
-    _ensure_char_image_models("캐릭터 시트 생성")
-    wf = patch_character_sheet(
-        char.name,
-        char.description,
-        negative_prompt=char.negative_prompt,
-        resolution=(char.resolution_w, char.resolution_h),
-        params=_parse_json(char.image_params),
-        output_prefix=f"projects/{project_id}/characters/{char_id}/sheet",
-    )
-    output_targets = find_output_targets(wf, title_contains="sheet") or find_output_targets(wf)
+    await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 스프라이트 생성")
+    _ensure_char_image_models("캐릭터 스프라이트 생성")
+    wf, output_targets = _build_sprite_workflow(char, project_id, char_id, mode)
 
     def persist(output: Path) -> Character:
-        dest = UPLOAD_DIR / f"{char_id}_sheet.png"
+        dest = UPLOAD_DIR / f"{char_id}_sprite.png"
         shutil.copy(output, dest)
-        char.sheet_path = str(dest)
+        char.sprite_path = str(dest)
         return char
 
     return await _run_character_workflow_stream(
@@ -416,51 +474,10 @@ async def generate_sheet_stream(
         workflow=wf,
         kind="image",
         execution_targets=output_targets,
-        success_message="캐릭터 시트 생성 완료",
+        success_message="캐릭터 스프라이트 생성 완료",
         persist=persist,
         session=session,
     )
-
-
-@router.post("/{char_id}/sheet/upload", response_model=CharacterRead)
-async def upload_sheet(
-    project_id: str,
-    char_id: str,
-    file: UploadFile = File(...),
-    session: Session = Depends(get_session),
-):
-    """외부에서 만든 캐릭터 시트를 업로드 (예: VN_Step1.1 결과물)."""
-    char = _get_char(project_id, char_id, session)
-    ext = Path(file.filename or "sheet.png").suffix or ".png"
-    dest = UPLOAD_DIR / f"{char_id}_sheet{ext}"
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    char.sheet_path = str(dest)
-    session.add(char)
-    session.commit()
-    session.refresh(char)
-    return char
-
-
-@router.post("/{char_id}/sprite/upload", response_model=CharacterRead)
-async def upload_sprite(
-    project_id: str,
-    char_id: str,
-    file: UploadFile = File(...),
-    session: Session = Depends(get_session),
-):
-    """투명 배경 스프라이트 (VN_Step4 결과) 업로드.
-    씬 이미지 생성 시 sheet 보다 우선하는 레퍼런스."""
-    char = _get_char(project_id, char_id, session)
-    ext = Path(file.filename or "sprite.png").suffix or ".png"
-    dest = UPLOAD_DIR / f"{char_id}_sprite{ext}"
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    char.sprite_path = str(dest)
-    session.add(char)
-    session.commit()
-    session.refresh(char)
-    return char
 
 
 # ── 목소리 업로드 ─────────────────────────────────────────────────────────

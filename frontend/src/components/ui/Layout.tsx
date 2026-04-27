@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Clapperboard } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
 import { api } from "../../api";
+import { comfyUiUrl } from "../../utils/hosts";
 
 export default function Layout() {
   const { data: comfyStatus } = useQuery({
@@ -9,6 +10,7 @@ export default function Layout() {
     queryFn: () => api.setup.comfyStatus(),
     refetchInterval: 5000,
   });
+  const comfyHref = comfyUiUrl();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -47,7 +49,7 @@ export default function Layout() {
           워크플로우 ↗
         </a>
         <a
-          href="http://127.0.0.1:8188"
+          href={comfyHref}
           target="_blank"
           rel="noreferrer"
           className="text-[11px] text-gray-500 hover:text-accent transition-colors"

@@ -42,8 +42,8 @@ E2E 파이프라인이 동작 중이며, 한 번의 "생성" 클릭으로 여러
 ┌───────────────────────▼──────────────────────────────┐
 │              ComfyUI (port 8188, embedded)            │
 │                                                      │
-│  ws_lipsync.json   ws_loop.json   ws_effect.json     │
-│  ws_char_create.json   ws_char_clone.json            │
+│  originals/*.json → runtime patched API prompts       │
+│  standalone/payload/*.json → external ComfyUI 실행본  │
 │  ws_tts_clone.json ws_tts_s2pro.json ws_voice_design │
 └──────────────────────────────────────────────────────┘
 ```

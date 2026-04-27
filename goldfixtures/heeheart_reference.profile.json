@@ -1,0 +1,85 @@
+{
+  "source": {
+    "path": "heeheart_reference",
+    "profile_kind": "structural_quality_reference",
+    "note": "This profile stores technical and editorial structure only. It does not copy frames, audio, characters, dialogue, or story beats.",
+    "local_path_stored": false
+  },
+  "video": {
+    "width": 1920,
+    "height": 1032,
+    "aspect_ratio": 1.86047,
+    "fps": 29.966,
+    "duration_sec": 72.549,
+    "bitrate_kbps": 9069.5,
+    "codec": "h264",
+    "pix_fmt": "yuv420p"
+  },
+  "audio": {
+    "codec": "aac",
+    "sample_rate": 48000,
+    "channels": 2,
+    "bitrate_kbps": 128.0,
+    "integrated_lufs": -30.8,
+    "loudness_range_lu": 9.4
+  },
+  "edit": {
+    "scene_threshold": 0.1,
+    "cut_count": 10,
+    "cut_times_sec": [
+      10.283,
+      18.783,
+      28.75,
+      36.083,
+      40.083,
+      48.583,
+      60.416,
+      65.749,
+      67.349,
+      70.349
+    ],
+    "shot_count": 11,
+    "shot_duration_sec": {
+      "min": 1.6,
+      "p25": 3.5,
+      "median": 7.333,
+      "p75": 9.233,
+      "max": 11.833,
+      "mean": 6.595
+    }
+  },
+  "quality_contract": {
+    "target_aspect_ratio": 1.86047,
+    "target_fps": 29.966,
+    "target_pix_fmt": "yuv420p",
+    "target_audio_sample_rate": 48000,
+    "target_audio_channels": 2,
+    "target_lufs": -30.8,
+    "target_shot_median_sec": 7.333,
+    "target_shot_count_per_min": 9.1
+  },
+  "render_spec": {
+    "video": {
+      "width": 832,
+      "height": 448,
+      "aspect_ratio": 1.85714,
+      "fps": 29.966,
+      "pix_fmt": "yuv420p",
+      "format": "video/h264-mp4",
+      "crf": 18
+    },
+    "audio": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "target_lufs": -30.8,
+      "loudness_range_lu": 9.4
+    },
+    "editing": {
+      "target_shot_median_sec": 7.333,
+      "target_shot_count_per_min": 9.1,
+      "transition_sec": 0.367,
+      "recommended_scene_count_for_70s": 10
+    },
+    "target_duration_sec": 72.549
+  }
+}

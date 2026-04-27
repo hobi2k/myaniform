@@ -1,36 +1,62 @@
 {
   "1": {
-    "_meta": {"title": "Qwen3-TTS Model (VoiceDesign)"},
-    "class_type": "FL_Qwen3TTS_ModelLoader",
+    "_meta": {"title": "Qwen3-TTS VoiceDesign model"},
+    "class_type": "Qwen3Loader",
     "inputs": {
-      "model_variant": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
-      "device": "cuda",
-      "dtype": "bfloat16",
+      "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "source": "HuggingFace",
+      "precision": "bf16",
       "attention": "sdpa",
-      "force_reload": false
+      "local_model_path": ""
     }
   },
   "2": {
-    "_meta": {"title": "Voice Design 생성"},
-    "class_type": "FL_Qwen3TTS_VoiceDesign",
+    "_meta": {"title": "Qwen3-TTS Base (design prompt encoder)"},
+    "class_type": "Qwen3Loader",
     "inputs": {
-      "model": ["1", 0],
-      "text": "안녕하세요.",
-      "voice_description": "A warm, gentle young female voice, calm pace, anime style.",
-      "language": "Korean",
-      "top_k": 50,
-      "top_p": 1.0,
-      "temperature": 0.9,
-      "repetition_penalty": 1.05,
-      "max_new_tokens": 2048,
-      "seed": -1
+      "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+      "source": "HuggingFace",
+      "precision": "bf16",
+      "attention": "sdpa",
+      "local_model_path": ""
     }
   },
   "3": {
+    "_meta": {"title": "Qwen3-TTS CustomVoice (design renderer)"},
+    "class_type": "Qwen3Loader",
+    "inputs": {
+      "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "source": "HuggingFace",
+      "precision": "bf16",
+      "attention": "sdpa",
+      "local_model_path": ""
+    }
+  },
+  "4": {
+    "_meta": {"title": "Voice Design 기반 일관 보이스 합성"},
+    "class_type": "Qwen3DirectedCloneFromVoiceDesign",
+    "inputs": {
+      "voice_design_model": ["1", 0],
+      "base_model": ["2", 0],
+      "custom_voice_model": ["3", 0],
+      "design_text": "안녕하세요.",
+      "design_instruct": "A warm, gentle young female voice, calm pace, anime style.",
+      "target_text": "안녕하세요.",
+      "seed": 42,
+      "language": "Korean",
+      "clone_instruct": "",
+      "ref_audio_max_seconds": 30.0,
+      "x_vector_only_mode": true,
+      "top_p": 1.0,
+      "temperature": 0.9,
+      "max_new_tokens": 2048
+    }
+  },
+  "5": {
     "_meta": {"title": "음성 저장"},
     "class_type": "SaveAudio",
     "inputs": {
-      "audio": ["2", 0],
+      "audio": ["4", 2],
       "filename_prefix": "myaniform/voice"
     }
   }

@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { Clapperboard, Play, User } from "lucide-react";
+import { Clapperboard, Layers3, Play, User } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import CharacterPanel from "../components/character/CharacterPanel";
 import SceneEditor from "../components/scene/SceneEditor";
 import Button from "../components/ui/Button";
+import TimelineComposer from "../components/video/TimelineComposer";
 
-type Tab = "characters" | "scenes";
+type Tab = "characters" | "scenes" | "composer";
 
 export default function ProjectEditorPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -66,6 +67,7 @@ export default function ProjectEditorPage() {
         {([
           { key: "characters", label: "캐릭터", icon: User },
           { key: "scenes",     label: "씬 편집", icon: Clapperboard },
+          { key: "composer",   label: "타임라인", icon: Layers3 },
         ] as const).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -86,6 +88,7 @@ export default function ProjectEditorPage() {
       <div className="flex-1 min-h-0 overflow-auto">
         {tab === "characters" && <CharacterPanel projectId={projectId} />}
         {tab === "scenes" && <SceneEditor projectId={projectId} />}
+        {tab === "composer" && <TimelineComposer projectId={projectId} />}
       </div>
     </div>
   );

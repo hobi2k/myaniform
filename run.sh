@@ -19,13 +19,15 @@ sleep 1
 
 echo "[1/2] ComfyUI (:8188) 기동 — normalvram + cache-none + smart-memory off (누적 OOM 방지)"
 nohup python ComfyUI/main.py --port 8188 \
+    --listen 0.0.0.0 \
     --normalvram --cache-none --disable-smart-memory \
+    --disable-pinned-memory \
     --reserve-vram 0.5 \
     > logs/comfyui.log 2>&1 &
 echo "  PID=$!  로그: logs/comfyui.log"
 
 echo "[2/2] FastAPI 백엔드 (:8000) 기동"
-nohup uvicorn backend.main:app --port 8000 \
+nohup uvicorn backend.main:app --host 0.0.0.0 --port 8000 \
     > logs/backend.log 2>&1 &
 echo "  PID=$!  로그: logs/backend.log"
 

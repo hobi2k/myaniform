@@ -56,7 +56,7 @@ uvicorn backend.main:app --port 8000
 
 PyTorch SDPA O(n²) → `sageattn` O(n) 전환은 필요조건이지만 충분조건이 아니었음.
 
-**최종 파라미터 (`workflows/ws_loop.json`, `ws_effect.json` 두 파일 모두 동일)**:
+**최종 파라미터 (`workflows/originals/동영상 루프 워크플로우.json`, `workflows/originals/동영상 첫끝프레임 워크플로우.json` 공통 적용)**:
 
 ```json
 WanVideoModelLoader:
@@ -147,10 +147,10 @@ nohup python ComfyUI/main.py --port 8188 --normalvram --cache-none \
 
 **증상**: `scene_voice_*.flac` 가 일관되게 **1.0s / ~9KB** — 실제 음성이 없음.
 
-**원인**: `ws_tts_clone.json` 의 `x_vector_only_mode=false` + `ref_text` 미제공.
-`FL_Qwen3TTS_VoiceClone.generate()` 가 예외를 잡아 `empty_audio(24000)` 1초 silence 를 반환 (`nodes/voice_clone.py:148`).
+**원인**: 과거 FL_Qwen3TTS 워크플로우에서 `x_vector_only_mode=false` + `ref_text` 미제공 조합을 썼기 때문.
+현재 런타임은 hobi2k `ComfyUI_Qwen3-TTS` 로 교체되어 FL_Qwen3TTS 노드를 사용하지 않는다.
 
-**해결**: `x_vector_only_mode=true` 로 변경 (2026-04-18 커밋됨). x-vector 임베딩만으로 화자 클론 — ref_text 불필요.
+**해결**: `Qwen3ClonePromptFromAudio(x_vector_only_mode=true)` 로 clone prompt를 만들고 `Qwen3CustomVoiceFromPrompt` 로 렌더링한다. x-vector 임베딩만으로 화자 클론 — ref_text 불필요.
 
 검증: 생성된 `voice_*.flac` 가 **3~7초** 범위인지 ffprobe 로 확인.
 
@@ -175,7 +175,7 @@ ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 ComfyUI/out
 "blocks_to_swap": 20
 ```
 
-`ws_loop.json`, `ws_effect.json` 에 반영됨. 신규 워크플로우 추가 시 동일 설정. 자세한 원인 분석은 상단 [I2V 2-stage 메모리 안전 설정](#i2v-2-stage-메모리-안전-설정-16gb-vram) 참고.
+원본 I2V 워크플로우 패처에 반영됨. 신규 워크플로우 추가 시 동일 설정. 자세한 원인 분석은 상단 [I2V 2-stage 메모리 안전 설정](#i2v-2-stage-메모리-안전-설정-16gb-vram) 참고.
 
 추가 최적화 (필요 시):
 - `num_frames` 49 → 33 (씬 길이 짧아짐)
@@ -238,34 +238,44 @@ bash check_models.sh                 # 최종 확인
 
 | 필드 | 기본값 (2-stage I2V) | 기본값 (S2V) | 용도 |
 |---|---|---|---|
-| `steps` | 6 (HIGH+LOW 각각) | 20 | S2V 에서 품질/속도 트레이드오프. FastFidelity 포팅 후 4 |
-| `cfg` | 1.0 | 5.0 | 2-stage 는 1.0 고정. S2V 는 5.0 최적 |
+| `steps` | 6 (HIGH+LOW 각각) | 4 | S2V FastFidelity 기본 |
+| `cfg` | 1.0 | 8.0 | 2-stage I2V 는 1.0, S2V FastFidelity 는 8.0 |
 | `sampler` | `euler` | `euler` | 거의 고정 |
 | `scheduler` | — | `simple` | 2-stage 는 shift 기반이라 scheduler 무의미 |
-| `shift` | 8.0 | — | ModelSamplingSD3 shift. FastFidelity 는 5 |
+| `shift` | 8.0 | 5.0 | ModelSamplingSD3 shift |
 | `frames` | 49 | 81 | 프레임 길이 (높이면 OOM 위험) |
-| `fps` | 32 | 32 | VHS_VideoCombine frame_rate |
+| `fps` | 32 | 16 | VHS_VideoCombine frame_rate |
+| `s2v_refiner_start_step` | — | 2 | S2V high/refiner split |
+| `s2v_audio_duration` | — | 5.0 | TTS audio crop duration |
 
 **주의**: `frames` 를 480×832 기준 49→85 로 올리면 16GB VRAM 에서 OOM 발생. 해상도·프레임·block_swap 은 서로 연동. 기본값이 검증된 안전 구간.
 
 ---
 
-## FastFidelity 참고
+## FastFidelity S2V 참고
 
-레퍼런스 워크플로우 `DaSiWa WAN 2.2 i2v FastFidelity C-AiO-65.json` 의 샘플링 레시피:
+`DaSiWa WAN 2.2 i2v FastFidelity C-AiO-65.json` / `C-SVI-29.json` 는 그대로 실행하지 않는다. 해당 파일은 I2V, FLF2V, S2V, Audio, Combine 기능이 섞인 올인원 레퍼런스이므로, 앱에는 **실제 S2V에 필요한 구조만** 추출해서 포팅해야 한다.
 
-| 파라미터 | 현재 (ws_loop) | FastFidelity |
-|---|---|---|
-| steps | 6 | **4** |
-| cfg | 1.0 | **8.0** |
-| sampler | euler | **euler** |
-| ModelSamplingSD3 shift | 8 | **5** |
-| HIGH start→end | 0→3 | 0→**2** |
-| LOW start→end | 3→-1 | **2**→-1 |
-| 추가 노드 | — | **CFGZeroStar** (model 패치) |
-| 모델 (S2V) | Wan2.2-S2V-14B Q4 GGUF | `DasiwaWan2214BS2V_littledemonV2.safetensors` (18.5GB) |
+S2V 포팅 시 참고할 구조:
 
-**제한**: 4step+cfg8 은 distilled 모델 전용. 현 GGUF 에 그대로 적용 시 결과 품질이 망가짐. 포팅하려면 `littledemonV2.safetensors` 를 `ComfyUI/models/diffusion_models/wan_s2v/` 에 복사 필요.
+- S2V 모델은 I2V HIGH/LOW가 아니라 `DasiwaWan2214BS2V_littledemonV2.safetensors` 계열을 사용한다.
+- 오디오 입력은 S2V용 audio encoder/whisper 계열로 인코딩하고, I2V/FLF2V first-last-frame branch는 쓰지 않는다.
+- 샘플링은 S2V용 `WanVideoSampler`/S2V embed 구조에만 적용한다.
+- MMAudio/Foley/Combine/Post-processing 블록은 선택 기능으로만 붙이고, 립싱크 S2V 코어와 섞어서 기본값으로 실행하지 않는다.
+
+샘플링 레시피:
+
+| 파라미터 | FastFidelity S2V |
+|---|---|
+| steps | **4** |
+| cfg | **8.0** |
+| sampler | **euler** |
+| ModelSamplingSD3 shift | **5** |
+| I2V HIGH/LOW split | 쓰지 않음 |
+| 추가 노드 | 원본 S2V branch + ModelSamplingSD3 shift=5 + app-injected MMAudio mixer |
+| 모델 (S2V) | `DasiwaWan2214BS2V_littledemonV2.safetensors` (18.5GB) |
+
+**제한**: 4step+cfg8 은 distilled S2V 모델 전용. 앱 기본 경로는 `littledemonV2.safetensors` 를 `ComfyUI/models/diffusion_models/wan_s2v/` 에 요구한다.
 
 Windows 경로: `D:\Stable Diffusion\StabilityMatrix-win-x64\Data\Packages\ComfyUI\models\diffusion_models\wan_s2v\DasiwaWan2214BS2V_littledemonV2.safetensors`.
 

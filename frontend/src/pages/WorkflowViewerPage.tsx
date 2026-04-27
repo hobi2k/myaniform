@@ -3,27 +3,27 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { comfyUiUrl } from "../utils/hosts";
 
 // scene.type → 워크플로우 매핑 (backend/routers/workflows.py 와 동기)
 const SCENE_TYPE_WORKFLOW: Record<string, string> = {
-  lipsync: "ws_lipsync",
-  loop:    "ws_loop",
-  effect:  "ws_effect",
+  lipsync: "s2v_fastfidelity_original",
+  loop:    "video_loop_original",
+  effect:  "video_effect_original",
 };
 
 // 선택 드롭다운용 전체 리스트
 const ALL_WORKFLOWS: { name: string; label: string; group: string }[] = [
-  { name: "ws_lipsync",       label: "립싱크 (S2V)",        group: "씬" },
-  { name: "ws_loop",          label: "루프 (I2V 2-stage)",  group: "씬" },
-  { name: "ws_effect",        label: "이펙트 (I2V 2-stage)",group: "씬" },
-  { name: "ws_scene_keyframe",label: "씬 키프레임",         group: "씬" },
+  { name: "scene_image_original", label: "장면 이미지 원본", group: "이미지 원본" },
+  { name: "character_sprite_new_original", label: "신규 스프라이트 원본", group: "캐릭터 원본" },
+  { name: "character_sprite_reference_original", label: "참조 스프라이트 원본", group: "캐릭터 원본" },
+  { name: "video_loop_original",   label: "루프 원본 (동영상 루프)",        group: "영상 원본" },
+  { name: "video_effect_original", label: "첫끝프레임 원본",              group: "영상 원본" },
+  { name: "s2v_fastfidelity_original", label: "립싱크 원본 (S2V FastFidelity)", group: "영상 원본" },
   { name: "ws_tts_clone",     label: "TTS 클론 (Qwen3)",    group: "TTS" },
   { name: "ws_tts_s2pro",     label: "TTS S2 Pro (Fish)",   group: "TTS" },
   { name: "ws_voice_design",  label: "보이스 디자인",       group: "TTS" },
-  { name: "ws_concat",        label: "영상 concat",         group: "Post" },
 ];
-
-const COMFYUI = "http://127.0.0.1:8188";
 
 export default function WorkflowViewerPage() {
   const [params, setParams] = useSearchParams();
@@ -35,16 +35,18 @@ export default function WorkflowViewerPage() {
 
   const initial = useMemo(() => {
     const raw = params.get("workflow") ?? params.get("type");
-    if (!raw) return "ws_loop";
+    if (!raw) return "video_loop_original";
     return SCENE_TYPE_WORKFLOW[raw] ?? raw;
   }, [params]);
 
   const [current, setCurrent] = useState(initial);
   const [loading, setLoading] = useState(true);
   const [timedOut, setTimedOut] = useState(false);
+  const [iframeMessage, setIframeMessage] = useState("");
+  const comfyUrl = useMemo(() => comfyUiUrl(), []);
   const iframeSrc = useMemo(
-    () => `${COMFYUI}/?workflow=${encodeURIComponent(current)}`,
-    [current],
+    () => `${comfyUrl}/?workflow=${encodeURIComponent(current)}`,
+    [comfyUrl, current],
   );
 
   useEffect(() => {
@@ -54,6 +56,25 @@ export default function WorkflowViewerPage() {
     const timer = window.setTimeout(() => setTimedOut(true), 5000);
     return () => window.clearTimeout(timer);
   }, [current, setParams]);
+
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      const msg = ev.data;
+      if (!msg || typeof msg !== "object") return;
+      if (msg.type === "myaniform:ready") {
+        setIframeMessage("ComfyUI 확장 연결됨");
+      } else if (msg.type === "myaniform:loaded") {
+        setIframeMessage(`${msg.workflow} 로드 완료`);
+        setLoading(false);
+        setTimedOut(false);
+      } else if (msg.type === "myaniform:error") {
+        setIframeMessage(msg.message ?? "워크플로우 로드 실패");
+        setTimedOut(true);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-bg">
@@ -67,7 +88,7 @@ export default function WorkflowViewerPage() {
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
         >
-          {["씬", "캐릭터", "TTS", "Post"].map((g) => (
+          {["영상 원본", "씬", "캐릭터", "TTS", "Post"].map((g) => (
             <optgroup key={g} label={g}>
               {ALL_WORKFLOWS.filter((w) => w.group === g).map((w) => (
                 <option key={w.name} value={w.name}>
@@ -79,7 +100,7 @@ export default function WorkflowViewerPage() {
         </select>
         <div className="flex-1" />
         <a
-          href={`${COMFYUI}/?workflow=${encodeURIComponent(current)}`}
+          href={`${comfyUrl}/?workflow=${encodeURIComponent(current)}`}
           target="_blank"
           rel="noreferrer"
           className="text-xs text-gray-500 hover:text-accent transition-colors"
@@ -111,7 +132,7 @@ export default function WorkflowViewerPage() {
                 {comfyStatus?.detail ?? "127.0.0.1:8188 연결 실패"}
               </p>
               <a
-                href={COMFYUI}
+                href={comfyUrl}
                 target="_self"
                 rel="noreferrer"
                 className="inline-flex mt-4 text-sm text-accent hover:underline"
@@ -128,8 +149,8 @@ export default function WorkflowViewerPage() {
                 ComfyUI iframe 이 열리면 여기서 바로 워크플로우를 확인할 수 있습니다.
               </p>
               {timedOut && (
-                <p className="text-xs text-red-300 mt-3">
-                  로딩이 지연되고 있습니다. ComfyUI 서버가 꺼져 있으면 iframe 이 비어 보일 수 있습니다.
+                <p className="text-xs text-red-300 mt-3 break-all">
+                  {iframeMessage || "로딩이 지연되고 있습니다. 새 창에서 열기를 눌러 브라우저 접근 주소를 확인하세요."}
                 </p>
               )}
             </div>

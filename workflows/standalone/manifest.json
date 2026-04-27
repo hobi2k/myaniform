@@ -1,0 +1,85 @@
+{
+  "workflows": [
+    {
+      "name": "voice_design_qwen3",
+      "api_prompt": "workflows/standalone/api/voice_design_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/voice_design_qwen3.json",
+      "required_inputs": [],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/voice_design_qwen3.json"
+    },
+    {
+      "name": "tts_clone_qwen3",
+      "api_prompt": "workflows/standalone/api/tts_clone_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/tts_clone_qwen3.json",
+      "required_inputs": [
+        "voicesample.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_clone_qwen3.json"
+    },
+    {
+      "name": "tts_clone_s2pro",
+      "api_prompt": "workflows/standalone/api/tts_clone_s2pro.json",
+      "prompt_payload": "workflows/standalone/payload/tts_clone_s2pro.json",
+      "required_inputs": [
+        "voicesample.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_clone_s2pro.json"
+    },
+    {
+      "name": "character_sprite_new",
+      "api_prompt": "workflows/standalone/api/character_sprite_new.json",
+      "prompt_payload": "workflows/standalone/payload/character_sprite_new.json",
+      "required_inputs": [],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/character_sprite_new.json"
+    },
+    {
+      "name": "character_sprite_reference",
+      "api_prompt": "workflows/standalone/api/character_sprite_reference.json",
+      "prompt_payload": "workflows/standalone/payload/character_sprite_reference.json",
+      "required_inputs": [
+        "character_sprite_ref.png"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/character_sprite_reference.json"
+    },
+    {
+      "name": "scene_image_qwen_edit",
+      "api_prompt": "workflows/standalone/api/scene_image_qwen_edit.json",
+      "prompt_payload": "workflows/standalone/payload/scene_image_qwen_edit.json",
+      "required_inputs": [
+        "charref_0.png",
+        "charref_1.png",
+        "visualref_0.png"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/scene_image_qwen_edit.json"
+    },
+    {
+      "name": "video_lipsync_s2v_fastfidelity",
+      "api_prompt": "workflows/standalone/api/video_lipsync_s2v_fastfidelity.json",
+      "prompt_payload": "workflows/standalone/payload/video_lipsync_s2v_fastfidelity.json",
+      "required_inputs": [
+        "standalone_scene.png",
+        "standalone_voice.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/video_lipsync_s2v_fastfidelity.json"
+    },
+    {
+      "name": "video_loop_i2v",
+      "api_prompt": "workflows/standalone/api/video_loop_i2v.json",
+      "prompt_payload": "workflows/standalone/payload/video_loop_i2v.json",
+      "required_inputs": [
+        "video_start.png"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/video_loop_i2v.json"
+    },
+    {
+      "name": "video_first_last_i2v",
+      "api_prompt": "workflows/standalone/api/video_first_last_i2v.json",
+      "prompt_payload": "workflows/standalone/payload/video_first_last_i2v.json",
+      "required_inputs": [
+        "video_start.png",
+        "video_end.png"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/video_first_last_i2v.json"
+    }
+  ]
+}

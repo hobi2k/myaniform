@@ -150,6 +150,7 @@ function Civitai-Download {
     }
     if (-not $env:CIVITAI_TOKEN) {
         Write-Host ("  [skip] {0,-55}  (CIVITAI_TOKEN 없음)" -f $DestName)
+        $script:FAILED.Add("civitai:$VersionId (CIVITAI_TOKEN 없음)") | Out-Null
         return
     }
     New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
@@ -192,6 +193,8 @@ function Download-HF {
     Write-Host "--- WanVideo 공통 (T5 + VAE) ---"
     Hf-Download "Kijai/WanVideo_comfy" "umt5-xxl-enc-bf16.safetensors"    "$MODELS\text_encoders"
     Hf-Download "Kijai/WanVideo_comfy" "Wan2_1_VAE_bf16.safetensors"      "$MODELS\vae"
+    Hf-Download "Comfy-Org/Wan_2.2_ComfyUI_Repackaged" "split_files/vae/wan_2.1_vae.safetensors" `
+                "$MODELS\vae" "wan_2.1_vae.safetensors"
 
     Write-Host ""
     Write-Host "--- Wan 2.2 I2V 14B High/Low (bf16) ---"
@@ -206,10 +209,13 @@ function Download-HF {
     Write-Host "--- S2V Audio Encoder ---"
     Hf-Download "Wan-AI/Wan2.2-S2V-14B" "wav2vec2-large-xlsr-53-english/model.safetensors" `
                 "$MODELS\audio_encoders" "wav2vec2_large_english_fp32.safetensors"
+    Hf-Download "Comfy-Org/Wan_2.2_ComfyUI_Repackaged" "split_files/audio_encoders/wav2vec2_large_english_fp16.safetensors" `
+                "$MODELS\audio_encoders" "wav2vec2_large_english_fp16.safetensors"
 
     Write-Host ""
     Write-Host "--- MMAudio (SFX) ---"
     Hf-Download "Kijai/MMAudio_safetensors" "mmaudio_large_44k_v2_fp16.safetensors"         "$MODELS\mmaudio"
+    Hf-Download "phazei/NSFW_MMaudio" "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" "$MODELS\mmaudio"
     Hf-Download "Kijai/MMAudio_safetensors" "mmaudio_vae_44k_fp16.safetensors"              "$MODELS\mmaudio"
     Hf-Download "Kijai/MMAudio_safetensors" "mmaudio_synchformer_fp16.safetensors"          "$MODELS\mmaudio"
     Hf-Download "Kijai/MMAudio_safetensors" "apple_DFN5B-CLIP-ViT-H-14-384_fp16.safetensors" "$MODELS\mmaudio"
@@ -272,6 +278,11 @@ function Download-HF {
     Hf-Download "Bingsu/adetailer" "hand_yolov8s.pt" "$MODELS\ultralytics\bbox" "hand_yolov8s.pt"
 
     Write-Host ""
+    Write-Host "--- 이미지 워크플로우 segmentation ---"
+    Hf-Download "Bingsu/adetailer" "person_yolov8m-seg.pt" `
+                "$MODELS\ultralytics\segm" "person_yolov8m-seg.pt"
+
+    Write-Host ""
     Write-Host "--- (Legacy) IP-Adapter FaceID ---"
     Hf-Download "h94/IP-Adapter-FaceID" "ip-adapter-faceid-plusv2_sdxl.bin"             "$MODELS\ipadapter"
     Hf-Download "h94/IP-Adapter-FaceID" "ip-adapter-faceid-plusv2_sdxl_lora.safetensors" "$MODELS\loras"
@@ -294,6 +305,11 @@ function Download-HF {
         "ILFlatMix.safetensors"
 
     Write-Host ""
+    Write-Host "--- Animagine XL 3.1 체크포인트 (원본 이미지 워크플로우) ---"
+    Hf-Download "LyliaEngine/animagineXLV31_v31" "animagineXLV31_v31.safetensors" `
+                "$MODELS\checkpoints" "animagineXLV31_v31.safetensors"
+
+    Write-Host ""
     Write-Host "--- SDXL Text Encoder ---"
     Hf-Download "comfyanonymous/flux_text_encoders" "clip_l.safetensors" "$MODELS\clip"
 
@@ -303,7 +319,7 @@ function Download-HF {
         return
     }
 
-    $q3Base = "$MODELS\tts\Qwen3TTS"
+    $q3Base = "$MODELS\Qwen3-TTS"
     $mainFiles = @(
         "config.json", "generation_config.json", "merges.txt", "vocab.json",
         "preprocessor_config.json", "tokenizer_config.json", "model.safetensors"
@@ -354,6 +370,10 @@ function Download-Civitai {
     Write-Host ""
     Write-Host "--- Civitai SmoothMix Ultimate I2V High 대체 ---"
     Civitai-Download "2746772" "$MODELS\diffusion_models\wan_i2v_high" "smoothmixUltimate_illustriousV20.safetensors"
+
+    Write-Host ""
+    Write-Host "--- Civitai DaSiWa Wan 2.2 S2V FastFidelity ---"
+    Civitai-Download "2433140" "$MODELS\diffusion_models\wan_s2v" "DasiwaWan2214BS2V_littledemonV2.safetensors"
 
     Write-Host ""
     Write-Host "--- Civitai SmoothMix LoRA ---"

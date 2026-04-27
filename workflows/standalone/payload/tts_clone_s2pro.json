@@ -1,0 +1,53 @@
+{
+  "prompt": {
+    "1": {
+      "_meta": {
+        "title": "레퍼런스 보이스 로드"
+      },
+      "class_type": "LoadAudio",
+      "inputs": {
+        "audio": "voicesample.wav"
+      }
+    },
+    "2": {
+      "_meta": {
+        "title": "Fish Audio S2 Pro — Voice Clone TTS"
+      },
+      "class_type": "FishS2VoiceCloneTTS",
+      "inputs": {
+        "model_path": "s2-pro",
+        "text": "안녕하세요. Fish Audio S2 Pro 독립 실행 테스트입니다.",
+        "reference_audio": [
+          "1",
+          0
+        ],
+        "language": "ko",
+        "device": "cuda",
+        "precision": "bfloat16",
+        "attention": "sdpa",
+        "max_new_tokens": 0,
+        "chunk_length": 200,
+        "temperature": 0.8,
+        "top_p": 0.8,
+        "repetition_penalty": 1.1,
+        "seed": 0,
+        "keep_model_loaded": true,
+        "offload_to_cpu": false,
+        "compile_model": false
+      }
+    },
+    "3": {
+      "_meta": {
+        "title": "음성 저장"
+      },
+      "class_type": "SaveAudio",
+      "inputs": {
+        "audio": [
+          "2",
+          0
+        ],
+        "filename_prefix": "standalone/tts_clone_s2pro"
+      }
+    }
+  }
+}

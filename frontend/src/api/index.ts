@@ -1,4 +1,4 @@
-import type { Character, DiffusionModelList, ImageModelList, LoraEntry, Project, Scene } from "../types";
+import type { Character, DiffusionModelList, EditRenderSettings, ImageModelList, LoraEntry, Project, Scene } from "../types";
 
 const BASE = "/api";
 
@@ -42,10 +42,10 @@ export const api = {
     delete: (projectId: string, charId: string) =>
       request<void>(`/projects/${projectId}/characters/${charId}`, { method: "DELETE" }),
 
-    uploadImage: (projectId: string, charId: string, file: File) => {
+    uploadReferenceImage: (projectId: string, charId: string, file: File) => {
       const form = new FormData();
       form.append("file", file);
-      return fetch(`${BASE}/projects/${projectId}/characters/${charId}/image/upload`, {
+      return fetch(`${BASE}/projects/${projectId}/characters/${charId}/reference/upload`, {
         method: "POST",
         body: form,
       }).then((r) => r.json() as Promise<Character>);
@@ -71,27 +71,11 @@ export const api = {
         body: JSON.stringify({ voice_design: voiceDesign }),
       }),
 
-    // Phase 4: VNCCS 캐릭터 시트 / 스프라이트
-    generateSheet: (projectId: string, charId: string) =>
-      request<Character>(`/projects/${projectId}/characters/${charId}/sheet/generate`, {
+    // Phase 4: VNCCS 캐릭터 스프라이트
+    generateSprite: (projectId: string, charId: string, mode: "auto" | "new" | "reference" = "auto") =>
+      request<Character>(`/projects/${projectId}/characters/${charId}/sprite/generate?mode=${mode}`, {
         method: "POST",
       }),
-    uploadSheet: (projectId: string, charId: string, file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      return fetch(`${BASE}/projects/${projectId}/characters/${charId}/sheet/upload`, {
-        method: "POST",
-        body: form,
-      }).then((r) => r.json() as Promise<Character>);
-    },
-    uploadSprite: (projectId: string, charId: string, file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      return fetch(`${BASE}/projects/${projectId}/characters/${charId}/sprite/upload`, {
-        method: "POST",
-        body: form,
-      }).then((r) => r.json() as Promise<Character>);
-    },
   },
 
   scenes: {
@@ -126,14 +110,14 @@ export const api = {
       request<Scene>(`/projects/${projectId}/scenes/${sceneId}/regenerate/video`, {
         method: "POST",
       }),
-    uploadImage: (projectId: string, sceneId: string, file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      return fetch(`${BASE}/projects/${projectId}/scenes/${sceneId}/image/upload`, {
+  },
+
+  generation: {
+    renderEdit: (projectId: string, settings: EditRenderSettings) =>
+      request<{ output_path: string }>(`/projects/${projectId}/generate/render_edit`, {
         method: "POST",
-        body: form,
-      }).then((r) => r.json() as Promise<Scene>);
-    },
+        body: JSON.stringify(settings),
+      }),
   },
 
   loras: {

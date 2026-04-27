@@ -4,9 +4,9 @@
 
 ---
 
-## 커스텀 노드 (모두 리포에 벤더링됨 — 재클론 불필요)
+## 커스텀 노드 (`setup.sh` / `setup.ps1` 가 자동 clone/pull)
 
-리포 클론 시 `ComfyUI/custom_nodes/` 에 이미 포함된 노드 (2026-04-20 기준 17개):
+새 클론에서는 `ComfyUI/custom_nodes/` 가 비어 있을 수 있다. `setup.sh` / `setup.ps1` 가 아래 노드를 GitHub에서 자동으로 clone/pull 한다.
 
 | 노드 | 용도 |
 |------|------|
@@ -14,19 +14,24 @@
 | ComfyUI-VideoHelperSuite (VHS) | 비디오 로드/저장 (`VHS_VideoCombine`) |
 | ComfyUI-MMAudio | MMAudio SFX 생성 |
 | ComfyUI_Geeky_AudioMixer | 오디오 믹싱 (TTS + SFX) |
-| ComfyUI-FL-Qwen3TTS | FL_Qwen3TTS_VoiceClone 등 |
+| ComfyUI_Qwen3-TTS | Qwen3Loader, Qwen3ClonePromptFromAudio, Qwen3CustomVoiceFromPrompt, Qwen3DirectedCloneFromVoiceDesign 등 |
 | ComfyUI-FishAudioS2 | Fish S2 Pro TTS (4종 노드) |
-| ComfyUI_IPAdapter_plus | IP-Adapter FaceID (레거시 폴백) |
+| ComfyUI_IPAdapter_plus | IP-Adapter FaceID |
 | ComfyUI-Frame-Interpolation | RIFE VFI |
+| ComfyUI-Image-Selector | `ImageSelector` / `LatentSelector` — 원본 I2V 워크플로우 배치 선택 |
 | ComfyUI-KJNodes | 유틸 (ColorMatch, ImageScaleBy) |
 | ComfyUI-Easy-Use | easy cleanGpuUsed 등 |
-| rgthree-comfy | Any Switch, Power Lora (레거시) |
+| rgthree-comfy | Any Switch, Power Lora |
+| Derfuu_ComfyUI_ModdedNodes | `DF_DynamicPrompts_Text_Box` 등 원본 비디오 워크플로우 텍스트 박스 |
 | ComfyUI-GGUF | GGUF 양자화 모델 로드 (S2V Q4_K_M) |
+| **ComfyUI_essentials** | `ImageFromBatch+` 등 원본 기본 I2V 워크플로우 유틸 |
 | ComfyUI-Crystools | 시스템 모니터링 노드 |
-| **ComfyUI-Impact-Pack** | `FaceDetailer`, `UltralyticsDetectorProvider`, `SAMLoader` — `ws_image_sdxl.json` Phase 1 필수 |
+| **ComfyUI-Impact-Pack** | `FaceDetailer`, `UltralyticsDetectorProvider`, `SAMLoader` — 원본 이미지/스프라이트 워크플로우 필수 |
 | **ComfyUI-Impact-Subpack** | Impact Pack 확장 (Ultralytics 래퍼) |
 | **vnccs** | VNCCS 본 파이프라인 (`VNCCS_*` 노드들, Phase 4 캐릭터 시트/스프라이트) |
 | **vnccs-utils** | VNCCS 보조 유틸 노드 (문자열 처리, 포즈 헬퍼) |
+
+myaniform 전용 로컬 확장은 `comfy_custom_nodes/` 에 추적하고, setup 단계에서 `ComfyUI/custom_nodes/` 로 복사한다.
 
 ---
 
@@ -80,6 +85,7 @@ setup.sh 가 처리하지만 핵심 패키지 정리:
 | 모델 | 경로 | 크기 |
 |---|---|---|
 | mmaudio_large_44k_v2 | `mmaudio/mmaudio_large_44k_v2_fp16.safetensors` | 2GB |
+| mmaudio_large_44k_nsfw_gold | `mmaudio/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors` | 필수 |
 | mmaudio VAE 44k | `mmaudio/mmaudio_vae_44k_fp16.safetensors` | 200MB |
 | mmaudio Synchformer | `mmaudio/mmaudio_synchformer_fp16.safetensors` | 400MB |
 | apple DFN5B CLIP ViT-H-14-384 | `mmaudio/apple_DFN5B-CLIP-ViT-H-14-384_fp16.safetensors` | 1GB |
@@ -106,13 +112,13 @@ setup.sh 가 처리하지만 핵심 패키지 정리:
 
 ### TTS — Qwen3-TTS (gated, HF_TOKEN 필요)
 
-`tts/Qwen3TTS/` 아래에:
+`Qwen3-TTS/` 아래에:
 
 | Variant | 용도 |
 |---|---|
-| `Qwen3-TTS-12Hz-1.7B-Base` | VoiceClone x-vector 모드 베이스 |
-| `Qwen3-TTS-12Hz-1.7B-CustomVoice` | 9개 사전정의 보이스 |
-| `Qwen3-TTS-12Hz-1.7B-VoiceDesign` | 텍스트 묘사 보이스 생성 |
+| `Qwen3-TTS-12Hz-1.7B-Base` | clone prompt/x-vector 생성 베이스 |
+| `Qwen3-TTS-12Hz-1.7B-CustomVoice` | clone prompt 기반 최종 보이스 렌더링 |
+| `Qwen3-TTS-12Hz-1.7B-VoiceDesign` | 텍스트 묘사 기반 보이스 디자인 |
 | `Qwen3-TTS-Tokenizer-12Hz` | 12Hz audio codec 토크나이저 |
 
 각 variant 마다: `config.json`, `generation_config.json`, `merges.txt`, `vocab.json`, `preprocessor_config.json`, `tokenizer_config.json`, `model.safetensors` + `speech_tokenizer/*` (4개 variant 중 3개).
@@ -134,9 +140,12 @@ setup.sh 가 처리하지만 핵심 패키지 정리:
 |---|---|---|
 | Dasiwa Illustrious Realistic v1 | `checkpoints/DasiwaIllustriousRealistic_v1.safetensors` | Civitai |
 | WAI-illustrious v160 (alt) | `checkpoints/waiIllustriousSDXL_v160.safetensors` | Civitai |
+| Animagine XL 3.1 | `checkpoints/animagineXLV31_v31.safetensors` | LyliaEngine |
 | Illustrious OpenPose ControlNet | `controlnet/SDXL/IllustriousXL_openpose.safetensors` | MIUProject |
 | SAM ViT-B | `sams/sam_vit_b_01ec64.pth` | MIUProject |
 | APISR 4x GRL GAN | `upscale_models/4x_APISR_GRL_GAN_generator.pth` | MIUProject |
+| SeedVR2 DiT | `SEEDVR2/seedvr2_ema_3b_fp16.safetensors` | numz |
+| SeedVR2 VAE | `SEEDVR2/ema_vae_fp16.safetensors` | numz |
 | CLIP-ViT-H-14 laion2B | `clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors` | h94/IP-Adapter |
 | SDXL VAE fp16 fix | `vae/sdxl_vae.safetensors` | madebyollin |
 | CLIP L | `clip/clip_l.safetensors` | comfyanonymous/flux_text_encoders |
@@ -147,6 +156,7 @@ setup.sh 가 처리하지만 핵심 패키지 정리:
 |---|---|
 | face_yolov8m | `ultralytics/bbox/face_yolov8m.pt` |
 | hand_yolov8s | `ultralytics/bbox/hand_yolov8s.pt` |
+| person_yolov8m-seg | `ultralytics/segm/person_yolov8m-seg.pt` |
 
 ### SmoothMix / AniEffect 루프 LoRA
 
@@ -179,6 +189,7 @@ setup.sh 가 처리하지만 핵심 패키지 정리:
 ComfyUI/models/
 ├── audio_encoders/      wav2vec2_large_english_fp32.safetensors
 ├── checkpoints/         Dasiwa*.safetensors (SDXL)
+│                         animagineXLV31_v31.safetensors
 ├── clip/                clip_l.safetensors
 ├── clip_vision/         CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors
 ├── controlnet/SDXL/     IllustriousXL_openpose.safetensors
@@ -197,9 +208,12 @@ ComfyUI/models/
 │   └── DMD2/            dmd2_sdxl_4step_lora_fp16.safetensors
 ├── mmaudio/             mmaudio_large_44k_v2_fp16.safetensors + vae + synchformer + apple CLIP
 ├── sams/                sam_vit_b_01ec64.pth
+├── SEEDVR2/             seedvr2_ema_3b_fp16.safetensors, ema_vae_fp16.safetensors
 ├── text_encoders/       umt5-xxl-enc-bf16.safetensors, qwen_2.5_vl_7b_fp8_scaled.safetensors
-├── tts/Qwen3TTS/        Qwen3-TTS-12Hz-1.7B-{Base,CustomVoice,VoiceDesign}/, Qwen3-TTS-Tokenizer-12Hz/
-├── ultralytics/bbox/    face_yolov8m.pt, hand_yolov8s.pt
+├── Qwen3-TTS/           Qwen3-TTS-12Hz-1.7B-{Base,CustomVoice,VoiceDesign}/, Qwen3-TTS-Tokenizer-12Hz/
+├── ultralytics/
+│   ├── bbox/            face_yolov8m.pt, hand_yolov8s.pt
+│   └── segm/            person_yolov8m-seg.pt
 ├── unet/                qwen-image-edit-2511-Q5_0.gguf
 ├── upscale_models/      4x_APISR_GRL_GAN_generator.pth
 └── vae/                 Wan2_1_VAE_bf16.safetensors, sdxl_vae.safetensors, qwen_image_vae.safetensors

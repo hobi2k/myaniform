@@ -1,0 +1,609 @@
+{
+  "5": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "6": {
+    "_meta": {
+      "title": "Runtime Wan I2V model"
+    },
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "4": {
+    "class_type": "Any Switch (rgthree)",
+    "inputs": {
+      "any_01": [
+        "5",
+        0
+      ],
+      "any_02": [
+        "6",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Any Switch (rgthree)"
+    }
+  },
+  "3": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader (rgthree)"
+    }
+  },
+  "2": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader High"
+    }
+  },
+  "7": {
+    "class_type": "PrimitiveFloat",
+    "inputs": {
+      "value": 8
+    },
+    "_meta": {
+      "title": "Shift"
+    }
+  },
+  "1": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "shift": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "12": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "13": {
+    "_meta": {
+      "title": "Runtime Wan I2V model"
+    },
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "11": {
+    "class_type": "Any Switch (rgthree)",
+    "inputs": {
+      "any_01": [
+        "12",
+        0
+      ],
+      "any_02": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Any Switch (rgthree)"
+    }
+  },
+  "10": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "11",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader (rgthree)"
+    }
+  },
+  "9": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "10",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader Low"
+    }
+  },
+  "8": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "9",
+        0
+      ],
+      "shift": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "14": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "15": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "20": {
+    "class_type": "DF_DynamicPrompts_Text_Box",
+    "inputs": {
+      "Text": "Camera fixed, original image drawing style maintained.\n\nThe man very slowly tilts his head toward the woman and moves his mouth as if speaking.\n\nThe woman keeps her mouth shut until he finishes speaking, then opens it slightly.\n"
+    },
+    "_meta": {
+      "title": "DynamicPrompts Text Box (Positive Prompt)"
+    }
+  },
+  "19": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": [
+        "20",
+        0
+      ],
+      "string_b": "",
+      "delimiter": ""
+    },
+    "_meta": {
+      "title": "StringConcatenate"
+    }
+  },
+  "23": {
+    "_meta": {
+      "title": "Runtime Wan text encoder"
+    },
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    }
+  },
+  "24": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "22": {
+    "class_type": "Any Switch (rgthree)",
+    "inputs": {
+      "any_01": [
+        "23",
+        0
+      ],
+      "any_02": [
+        "24",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Any Switch (rgthree)"
+    }
+  },
+  "21": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "22",
+        0
+      ],
+      "text": "slow romantic scene transition, gentle head turn, warm lighting shift"
+    },
+    "_meta": {
+      "title": "Positive encode"
+    }
+  },
+  "25": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "29": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "22",
+        0
+      ],
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走\n\nwidely open eyes."
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "31": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "video_start.png",
+      "upload": "image"
+    },
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "30": {
+    "class_type": "Any Switch (rgthree)",
+    "inputs": {
+      "any_01": [
+        "31",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Any Switch (rgthree)"
+    }
+  },
+  "32": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "video_start.png",
+      "upload": "image"
+    },
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "28": {
+    "class_type": "WanFirstLastFrameToVideo",
+    "inputs": {
+      "positive": [
+        "21",
+        0
+      ],
+      "negative": [
+        "29",
+        0
+      ],
+      "vae": [
+        "25",
+        0
+      ],
+      "start_image": [
+        "31",
+        0
+      ],
+      "end_image": [
+        "50",
+        0
+      ],
+      "width": 480,
+      "height": 832,
+      "length": 81,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "WanFirstLastFrameToVideo"
+    }
+  },
+  "33": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "28",
+        0
+      ],
+      "negative": [
+        "28",
+        1
+      ],
+      "latent_image": [
+        "28",
+        2
+      ],
+      "add_noise": "enable",
+      "noise_seed": 0,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 3,
+      "return_with_leftover_noise": "enable"
+    },
+    "_meta": {
+      "title": "KSampler (Advanced) High"
+    }
+  },
+  "27": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "8",
+        0
+      ],
+      "positive": [
+        "28",
+        0
+      ],
+      "negative": [
+        "28",
+        1
+      ],
+      "latent_image": [
+        "33",
+        0
+      ],
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 3,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable"
+    },
+    "_meta": {
+      "title": "KSampler (Advanced) Low"
+    }
+  },
+  "26": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "27",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "36": {
+    "class_type": "easy showAnything",
+    "inputs": {
+      "anything": [
+        "19",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Final prompt preview"
+    }
+  },
+  "37": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "27",
+        0
+      ],
+      "vae": [
+        "25",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "38": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "37",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "46": {
+    "class_type": "ImageScaleBy",
+    "inputs": {
+      "image": [
+        "38",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "scale_by": 2
+    },
+    "_meta": {
+      "title": "ImageScaleBy"
+    }
+  },
+  "45": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "46",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "44": {
+    "class_type": "RIFE VFI",
+    "inputs": {
+      "frames": [
+        "45",
+        0
+      ],
+      "ckpt_name": "rife49.pth",
+      "clear_cache_after_n_frames": 32,
+      "multiplier": 2,
+      "fast_mode": false,
+      "ensemble": true,
+      "scale_factor": 1,
+      "dtype": "float32",
+      "torch_compile": false,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Frame Interpolation (RIFE)"
+    }
+  },
+  "48": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "44",
+        0
+      ],
+      "audio": [
+        "53",
+        0
+      ],
+      "filename_prefix": "standalone/video_first_last_i2v",
+      "save_output": true
+    },
+    "_meta": {
+      "title": "VHS_VideoCombine"
+    }
+  },
+  "49": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "37",
+        0
+      ],
+      "audio": [
+        "53",
+        0
+      ],
+      "filename_prefix": "standalone/video_first_last_i2v",
+      "save_output": true
+    },
+    "_meta": {
+      "title": "VHS_VideoCombine"
+    }
+  },
+  "50": {
+    "_meta": {
+      "title": "Runtime end image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "video_end.png",
+      "upload": "image"
+    }
+  },
+  "51": {
+    "_meta": {
+      "title": "MMAudio 모델"
+    },
+    "class_type": "MMAudioModelLoader",
+    "inputs": {
+      "mmaudio_model": "mmaudio_large_44k_v2_fp16.safetensors",
+      "base_precision": "fp16"
+    }
+  },
+  "52": {
+    "_meta": {
+      "title": "MMAudio Feature Utils"
+    },
+    "class_type": "MMAudioFeatureUtilsLoader",
+    "inputs": {
+      "vae_model": "mmaudio_vae_44k_fp16.safetensors",
+      "synchformer_model": "mmaudio_synchformer_fp16.safetensors",
+      "clip_model": "apple_DFN5B-CLIP-ViT-H-14-384_fp16.safetensors",
+      "mode": "44k",
+      "precision": "fp16"
+    }
+  },
+  "53": {
+    "_meta": {
+      "title": "MMAudio SFX"
+    },
+    "class_type": "MMAudioSampler",
+    "inputs": {
+      "mmaudio_model": [
+        "51",
+        0
+      ],
+      "feature_utils": [
+        "52",
+        0
+      ],
+      "images": [
+        "44",
+        0
+      ],
+      "duration": 5.0,
+      "steps": 25,
+      "cfg": 4.5,
+      "seed": 0,
+      "prompt": "soft ambient movement, quiet room tone",
+      "negative_prompt": "talking, speech, voice, voices, singing, music, words, laughter, robotic, low quality",
+      "mask_away_clip": false,
+      "force_offload": true
+    }
+  }
+}

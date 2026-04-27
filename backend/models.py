@@ -14,6 +14,7 @@ from sqlmodel import Field, SQLModel
 
 class SceneType(str, Enum):
     lipsync = "lipsync"
+    basic   = "basic"
     loop    = "loop"
     effect  = "effect"
 
@@ -59,15 +60,27 @@ class Character(SQLModel, table=True):
     project_id:   str = Field(foreign_key="project.id")
     name:         str
     description:  Optional[str] = None   # 텍스트 설명 (이미지 생성용)
+    background_color: Optional[str] = None
+    aesthetics:   Optional[str] = None
+    nsfw:         Optional[bool] = None
+    sex:          Optional[str] = None
+    age:          Optional[int] = None
+    race:         Optional[str] = None
+    eyes:         Optional[str] = None
+    hair:         Optional[str] = None
+    face:         Optional[str] = None
+    body:         Optional[str] = None
+    skin_color:   Optional[str] = None
+    lora_prompt:  Optional[str] = None
     negative_prompt: Optional[str] = None
     resolution_w: Optional[int] = None
     resolution_h: Optional[int] = None
     image_params: Optional[str] = None   # JSON ImageParams
+    sprite_params: Optional[str] = None  # JSON ImageParams for VN sprite workflows
 
     # 이미지 (단일 레퍼런스)
     image_path:   Optional[str] = None   # 업로드 or 생성된 이미지 경로
     # VNCCS 스프라이트/시트 (Phase 4)
-    sheet_path:   Optional[str] = None   # VN_Step1 결과: 캐릭터 시트 (정면/후면/측면)
     sprite_path:  Optional[str] = None   # VN_Step4 결과: 투명 배경 스프라이트
 
     # 목소리
@@ -88,12 +101,24 @@ class CharacterRead(SQLModel):
     project_id:        str
     name:              str
     description:       Optional[str]
+    background_color:  Optional[str]
+    aesthetics:        Optional[str]
+    nsfw:              Optional[bool]
+    sex:               Optional[str]
+    age:               Optional[int]
+    race:              Optional[str]
+    eyes:              Optional[str]
+    hair:              Optional[str]
+    face:              Optional[str]
+    body:              Optional[str]
+    skin_color:        Optional[str]
+    lora_prompt:       Optional[str]
     negative_prompt:   Optional[str]
     resolution_w:      Optional[int]
     resolution_h:      Optional[int]
     image_params:      Optional[str]
+    sprite_params:     Optional[str]
     image_path:        Optional[str]
-    sheet_path:        Optional[str]
     sprite_path:       Optional[str]
     voice_design:      Optional[str]
     voice_sample_path: Optional[str]
@@ -117,13 +142,13 @@ class Scene(SQLModel, table=True):
 
     # 캐릭터 (Phase 2: N-명 지원)
     # character_ids_json 이 우선 — JSON list ["id1","id2",...] 최대 N명
-    # 비어있으면 character_id + character_b_id 로 폴백 (구버전 호환)
-    character_id:      Optional[str] = None  # [deprecated] 주 캐릭터
-    character_b_id:    Optional[str] = None  # [deprecated] 보조 캐릭터
-    character_ids_json: Optional[str] = None  # 신규: N-char 리스트
+    # character_id / character_b_id 는 기존 DB 프로젝트 읽기용 보조 컬럼.
+    character_id:      Optional[str] = None
+    character_b_id:    Optional[str] = None
+    character_ids_json: Optional[str] = None
 
     # Phase 3: 이미지/비디오 파라미터 (모두 옵션, JSON 으로 유연)
-    # image_workflow: "qwen_edit" (기본, 캐릭터 레퍼런스 사용) | "sdxl" (고품질, 텍스트→이미지)
+    # image_workflow: "qwen_edit" (기본, 캐릭터 스프라이트 레퍼런스 사용) | "sdxl" (명시 선택 시 텍스트→이미지)
     image_workflow: Optional[str] = None
     resolution_w:   Optional[int] = None  # 기본 832 (SDXL) / 832 (Qwen)
     resolution_h:   Optional[int] = None  # 기본 1216
@@ -131,6 +156,8 @@ class Scene(SQLModel, table=True):
     #                     "scheduler": "sgm_uniform", "loras": [{"name","strength"}…],
     #                     "face_detailer": true, "hand_detailer": true}
     image_params:   Optional[str] = None
+    # "new_scene": 현재 씬 이미지 생성/사용 | "previous_last_frame": 이전 씬의 마지막 프레임으로 시작
+    frame_source_mode: Optional[str] = "new_scene"
     # video_params JSON: Wan 2.2 튜닝값
     # {"steps": 4, "cfg": 1.0, "sampler": "unipc", "scheduler": "simple",
     #  "frames": 81, "fps": 16}
@@ -168,6 +195,7 @@ class SceneCreate(SQLModel):
     resolution_w:       Optional[int] = None
     resolution_h:       Optional[int] = None
     image_params:       Optional[str] = None
+    frame_source_mode:  Optional[str] = "new_scene"
     video_params:       Optional[str] = None
     dialogue:           Optional[str] = None
     tts_engine:         TTSEngine = TTSEngine.qwen3
@@ -189,6 +217,7 @@ class SceneRead(SQLModel):
     resolution_w:       Optional[int]
     resolution_h:       Optional[int]
     image_params:       Optional[str]
+    frame_source_mode:  Optional[str]
     video_params:       Optional[str]
     dialogue:           Optional[str]
     tts_engine:         TTSEngine

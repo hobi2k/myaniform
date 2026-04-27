@@ -1,0 +1,87 @@
+{
+  "prompt": {
+    "1": {
+      "_meta": {
+        "title": "Qwen3-TTS VoiceDesign model"
+      },
+      "class_type": "Qwen3Loader",
+      "inputs": {
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "sdpa",
+        "local_model_path": ""
+      }
+    },
+    "2": {
+      "_meta": {
+        "title": "Qwen3-TTS Base (design prompt encoder)"
+      },
+      "class_type": "Qwen3Loader",
+      "inputs": {
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "sdpa",
+        "local_model_path": ""
+      }
+    },
+    "3": {
+      "_meta": {
+        "title": "Qwen3-TTS CustomVoice (design renderer)"
+      },
+      "class_type": "Qwen3Loader",
+      "inputs": {
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "sdpa",
+        "local_model_path": ""
+      }
+    },
+    "4": {
+      "_meta": {
+        "title": "Voice Design 기반 일관 보이스 합성"
+      },
+      "class_type": "Qwen3DirectedCloneFromVoiceDesign",
+      "inputs": {
+        "voice_design_model": [
+          "1",
+          0
+        ],
+        "base_model": [
+          "2",
+          0
+        ],
+        "custom_voice_model": [
+          "3",
+          0
+        ],
+        "design_text": "오늘은 천천히 이야기해볼게요.",
+        "design_instruct": "Warm intimate Korean female voice, soft breath, natural pacing",
+        "target_text": "오늘은 천천히 이야기해볼게요.",
+        "seed": 42,
+        "language": "Korean",
+        "clone_instruct": "",
+        "ref_audio_max_seconds": 30.0,
+        "x_vector_only_mode": true,
+        "top_p": 1.0,
+        "temperature": 0.9,
+        "max_new_tokens": 2048
+      }
+    },
+    "5": {
+      "_meta": {
+        "title": "음성 저장"
+      },
+      "class_type": "SaveAudio",
+      "inputs": {
+        "audio": [
+          "4",
+          2
+        ],
+        "filename_prefix": "standalone/voice_design_qwen3"
+      }
+    }
+  }
+}

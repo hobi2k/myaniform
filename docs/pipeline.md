@@ -12,7 +12,7 @@ A안과 B안이 공유하는 장면 처리 방식.
 |------|------|
 | 립싱크 엔진 | `WanSoundImageToVideo` |
 | 립싱크 모델 | Wan2.2 S2V 14B (Dasiwa 파인튜닝) |
-| TTS | QWEN3 `Qwen3VoiceClone` / `Qwen3VoiceDesign` or S2Pro `FishS2VoiceCloneTTS` |
+| TTS | QWEN3 `Qwen3ClonePromptFromAudio` + `Qwen3CustomVoiceFromPrompt` / `Qwen3DirectedCloneFromVoiceDesign` or S2Pro `FishS2VoiceCloneTTS` |
 | SFX | `MMAudioSampler` |
 | 오디오 믹싱 | `GeekyAudioMixer` |
 
@@ -84,7 +84,7 @@ GeekyAudioMixer:
 | SFX | `MMAudioSampler` (배경음) |
 | 보간 | `RIFE VFI` (rife49, ×2, ensemble) |
 
-### 처리 흐름 (ws_loop.json)
+### 처리 흐름 (원본 루프 I2V)
 
 ```
 이미지 생성 (Qwen Image Edit 또는 SDXL)
@@ -182,7 +182,7 @@ Phase 2 오버홀로 **N-캐릭터 동시 등장**을 1차 시민으로 지원. 
 ```
 캐릭터 N명 — 각각 sprite_path > sheet_path > image_path 중 최선 선택
     ↓ ComfyUI/input 에 charref_0, charref_1, … 로 스테이징
-ws_scene_keyframe.json + TextEncodeQwenImageEditPlus
+workflows/originals/이미지 워크플로우.json + TextEncodeQwenImageEditPlus
   image1 = charref_0
   image2 = charref_1
   image3..N = 런타임 추가된 LoadImage 노드
@@ -192,29 +192,17 @@ ws_scene_keyframe.json + TextEncodeQwenImageEditPlus
 20 step Qwen Edit KSampler → 씬 키프레임
 ```
 
-구현: `build_multi_ref_prompt()` + `_inject_multi_loadimages()` (workflow_patcher.py).
+구현: `build_multi_ref_prompt()` + 원본 이미지 워크플로우에 Qwen Image Edit branch 주입.
 
-### 방법 2: SDXL 고품질 폴백 (레퍼런스 없거나 Qwen GGUF 미설치)
+### 방법 2: VNCCS 원본 스프라이트 파이프라인
 
-```
-ws_image_sdxl.json
-  → waiIllustriousSDXL_v160 + LoRA 3슬롯
-  → 30 step euler_ancestral + FaceDetailer(face_yolov8m) + HandDetailer(hand_yolov8s)
-```
-
-캐릭터 "이미지 생성" 버튼도 이 워크플로우로 통일 (`patch_char_generate` → `patch_image(workflow="sdxl")`).
-
-### 방법 3: VNCCS 본 파이프라인 (투명배경 스프라이트)
-
-ComfyUI `/workflows` 뷰어에서 수동 실행하는 3단계 파이프라인:
+repo에 포함된 원본 UI-export:
 
 ```
-vnccs_step1_sheet_ui.json
+workflows/originals/VN_Step1_QWEN_CharSheetGenerator_v1.json
   → 턴어라운드 시트 (정면/측면/후면)
-vnccs_step1_1_clone_ui.json
+workflows/originals/VN_Step1.1_QWEN_Clone_Existing_Character_v1.json
   → 외부 레퍼런스를 VNCCS 스타일로 클론
-vnccs_step4_sprite_ui.json
-  → 투명 배경 스프라이트 추출
 ```
 
 산출물을 캐릭터 패널 "VNCCS 시트/스프라이트" 섹션에서 업로드 →

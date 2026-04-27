@@ -88,6 +88,8 @@ class _WorkflowFlattener:
 
         if node_type == "Reroute":
             reroute_in = node.get("inputs", [{}])[0]
+            if reroute_in.get("link") is None:
+                return None
             return self._resolve_link(graph.link_by_id[reroute_in["link"]], graph)
 
         if node_type in self.subgraphs:

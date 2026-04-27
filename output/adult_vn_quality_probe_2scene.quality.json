@@ -1,0 +1,114 @@
+{
+  "candidate": "/home/hosung/pytorch-demo/myaniform/output/adult_vn_quality_probe_2scene.mp4",
+  "ok": false,
+  "checks": [
+    {
+      "name": "aspect_ratio",
+      "actual": 1.85714,
+      "expected": 1.86047,
+      "tolerance": "+/-0.03",
+      "ok": true
+    },
+    {
+      "name": "fps",
+      "actual": 30.0,
+      "expected": 29.966,
+      "tolerance": "+/-3fps",
+      "ok": true
+    },
+    {
+      "name": "audio_sample_rate",
+      "actual": 48000,
+      "expected": 48000,
+      "tolerance": "exact",
+      "ok": true
+    },
+    {
+      "name": "integrated_lufs",
+      "actual": -31.1,
+      "expected": -30.8,
+      "tolerance": "+/-4 LUFS",
+      "ok": true
+    },
+    {
+      "name": "shot_count_per_min",
+      "actual": 3.76,
+      "expected": 9.1,
+      "tolerance": "45%-180% of reference",
+      "ok": false
+    }
+  ],
+  "candidate_profile": {
+    "source": {
+      "path": "/home/hosung/pytorch-demo/myaniform/output/adult_vn_quality_probe_2scene.mp4",
+      "profile_kind": "structural_quality_reference",
+      "note": "This profile stores technical and editorial structure only. It does not copy frames, audio, characters, dialogue, or story beats."
+    },
+    "video": {
+      "width": 832,
+      "height": 448,
+      "aspect_ratio": 1.85714,
+      "fps": 30.0,
+      "duration_sec": 15.967,
+      "bitrate_kbps": 1707.5,
+      "codec": "h264",
+      "pix_fmt": "yuv420p"
+    },
+    "audio": {
+      "codec": "aac",
+      "sample_rate": 48000,
+      "channels": 2,
+      "bitrate_kbps": 191.6,
+      "integrated_lufs": -31.1,
+      "loudness_range_lu": 7.3
+    },
+    "edit": {
+      "scene_threshold": 0.1,
+      "cut_count": 0,
+      "cut_times_sec": [],
+      "shot_count": 1,
+      "shot_duration_sec": {
+        "min": 15.967,
+        "p25": 15.967,
+        "median": 15.967,
+        "p75": 15.967,
+        "max": 15.967,
+        "mean": 15.967
+      }
+    },
+    "quality_contract": {
+      "target_aspect_ratio": 1.85714,
+      "target_fps": 30.0,
+      "target_pix_fmt": "yuv420p",
+      "target_audio_sample_rate": 48000,
+      "target_audio_channels": 2,
+      "target_lufs": -31.1,
+      "target_shot_median_sec": 15.967,
+      "target_shot_count_per_min": 3.76
+    },
+    "render_spec": {
+      "video": {
+        "width": 832,
+        "height": 448,
+        "aspect_ratio": 1.85714,
+        "fps": 30.0,
+        "pix_fmt": "yuv420p",
+        "format": "video/h264-mp4",
+        "crf": 18
+      },
+      "audio": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "target_lufs": -31.1,
+        "loudness_range_lu": 7.3
+      },
+      "editing": {
+        "target_shot_median_sec": 15.967,
+        "target_shot_count_per_min": 3.76,
+        "transition_sec": 0.45,
+        "recommended_scene_count_for_70s": 4
+      },
+      "target_duration_sec": 15.967
+    }
+  }
+}

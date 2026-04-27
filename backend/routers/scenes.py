@@ -2,15 +2,19 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import Character, Project, Scene, SceneCreate, SceneRead, SceneType
 from ..services import comfyui_client as comfy
+from ..services import ffmpeg_utils as ffmpeg
+from ..services.scene_policy import compose_scene_image_prompts
 from ..services.workflow_patcher import (
     build_multi_ref_prompt,
+    find_video_output_targets,
     patch_image,
+    patch_video_basic,
     patch_video_effect,
     patch_video_lipsync,
     patch_video_loop,
@@ -19,7 +23,7 @@ from ..services.workflow_patcher import (
 
 
 def _scene_characters(s: Scene, session: Session) -> list[Character]:
-    """scene.character_ids_json 우선. 폴백: character_id + character_b_id."""
+    """Return selected scene characters, keeping old A/B columns readable."""
     ids: list[str] = []
     if s.character_ids_json:
         try:
@@ -132,26 +136,6 @@ def reorder_scenes(
     session.commit()
 
 
-@router.post("/{scene_id}/image/upload", response_model=SceneRead)
-def upload_scene_image(
-    project_id: str,
-    scene_id: str,
-    file: UploadFile,
-    session: Session = Depends(get_session),
-):
-    s = _get_scene(project_id, scene_id, session)
-    suffix = Path(file.filename or "img.png").suffix or ".png"
-    dst_name = f"scene_image_{scene_id}{suffix}"
-    with open(_COMFY_INPUT / dst_name, "wb") as f:
-        f.write(file.file.read())
-    s.image_path = dst_name
-    s.clip_stale = True
-    session.add(s)
-    session.commit()
-    session.refresh(s)
-    return s
-
-
 # ── 단계별 재생성 엔드포인트 ──────────────────────────────────────────────
 
 def _stage_into_input(src: Path, prefix: str) -> str:
@@ -159,6 +143,47 @@ def _stage_into_input(src: Path, prefix: str) -> str:
     dst_name = f"{prefix}{src.suffix}"
     shutil.copy(src, _COMFY_INPUT / dst_name)
     return dst_name
+
+
+def _previous_scene(s: Scene, session: Session) -> Scene | None:
+    return session.exec(
+        select(Scene)
+        .where(Scene.project_id == s.project_id, Scene.order < s.order)
+        .order_by(Scene.order.desc())
+    ).first()
+
+
+def _previous_scene_image_ref(s: Scene, session: Session, image_params: dict) -> str | None:
+    """Return previous scene keyframe for visual continuity unless explicitly disabled."""
+    if image_params.get("continuity_reference") is False:
+        return None
+    prev = _previous_scene(s, session)
+    if not prev or not prev.image_path:
+        return None
+    return prev.image_path
+
+
+def _stage_previous_last_frame(s: Scene, session: Session) -> str:
+    prev = _previous_scene(s, session)
+    if not prev:
+        raise HTTPException(400, "첫 씬은 이전 라스트프레임을 사용할 수 없습니다.")
+    if not prev.clip_path:
+        raise HTTPException(400, "이전 씬 영상이 아직 생성되지 않아 라스트프레임을 사용할 수 없습니다.")
+    src = Path(prev.clip_path)
+    if not src.exists():
+        raise HTTPException(400, f"이전 씬 영상 파일을 찾을 수 없습니다: {prev.clip_path}")
+
+    extracted = OUTPUT_DIR / f"scene_{s.id}_previous_last_frame.png"
+    ffmpeg.extract_last_frame(src, extracted)
+    return _stage_into_input(extracted, f"scene_prev_last_{s.id}")
+
+
+def _video_start_image(s: Scene, session: Session, character_reference_image: str | None) -> str | None:
+    if (s.frame_source_mode or "new_scene") == "previous_last_frame":
+        staged = _stage_previous_last_frame(s, session)
+        s.image_path = staged
+        return staged
+    return s.image_path or character_reference_image
 
 
 def _parse_loras(raw: str | None) -> list[dict]:
@@ -176,8 +201,6 @@ async def regenerate_voice(
     project_id: str, scene_id: str, session: Session = Depends(get_session)
 ):
     s = _get_scene(project_id, scene_id, session)
-    if s.type != SceneType.lipsync:
-        raise HTTPException(400, "립싱크 씬에서만 음성 재생성이 가능합니다.")
     if not s.dialogue:
         raise HTTPException(400, "대사가 비어 있습니다.")
 
@@ -207,19 +230,39 @@ async def regenerate_image(
     project_id: str, scene_id: str, session: Session = Depends(get_session)
 ):
     s = _get_scene(project_id, scene_id, session)
+    if (s.frame_source_mode or "new_scene") == "previous_last_frame":
+        s.image_path = _stage_previous_last_frame(s, session)
+        s.clip_stale = True
+        session.add(s)
+        session.commit()
+        session.refresh(s)
+        return s
+
     chars = _scene_characters(s, session)
+    image_params = _parse_json(s.image_params)
 
     char_descs = [(c.name, c.description or "") for c in chars]
-    prompt = build_multi_ref_prompt(char_descs, s.bg_prompt or "")
+    prompt, negative_prompt = compose_scene_image_prompts(
+        build_multi_ref_prompt(char_descs, s.bg_prompt or ""),
+        image_params,
+    )
     character_refs = [
         {
             "name": c.name,
             "description": c.description or "",
-            "image_path": c.sprite_path or c.sheet_path or c.image_path,
+            "image_path": c.sprite_path,
         }
         for c in chars
-        if (c.sprite_path or c.sheet_path or c.image_path)
+        if c.sprite_path
     ]
+    image_workflow = (s.image_workflow or "qwen_edit").lower()
+
+    if image_workflow == "qwen_edit":
+        missing = [c.name for c in chars if not c.sprite_path]
+        if missing:
+            raise HTTPException(400, f"Qwen Edit 장면 이미지는 선택된 모든 캐릭터의 스프라이트가 필요합니다: {', '.join(missing)}")
+        if not character_refs:
+            raise HTTPException(400, "Qwen Edit 장면 이미지는 캐릭터 스프라이트 레퍼런스가 필요합니다. 배경 전용 이미지는 SDXL을 명시 선택하세요.")
 
     if not prompt and not character_refs:
         raise HTTPException(400, "배경 프롬프트나 캐릭터가 필요합니다.")
@@ -227,9 +270,11 @@ async def regenerate_image(
     wf = patch_image(
         prompt=prompt,
         character_refs=character_refs,
-        workflow=s.image_workflow,
+        visual_refs=[ref] if (ref := _previous_scene_image_ref(s, session, image_params)) else None,
+        workflow=image_workflow,
         resolution=(s.resolution_w, s.resolution_h),
-        params=_parse_json(s.image_params),
+        params=image_params,
+        negative_prompt=negative_prompt,
         output_prefix=f"projects/{project_id}/scenes/{scene_id}/image",
     )
     out = await comfy.run_workflow(wf, kind="image")
@@ -250,7 +295,7 @@ async def regenerate_video(
     s = _get_scene(project_id, scene_id, session)
     chars = _scene_characters(s, session)
     character = chars[0] if chars else None
-    image_path = s.image_path or (character.image_path if character else None)
+    image_path = _video_start_image(s, session, character.image_path if character else None)
     video_params = _parse_json(s.video_params)
 
     if s.type == SceneType.lipsync:
@@ -267,6 +312,21 @@ async def regenerate_video(
             params=video_params,
             output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
         )
+    elif s.type == SceneType.basic:
+        if not image_path:
+            raise HTTPException(400, "기본 영상 씬은 기준 이미지가 필요합니다.")
+        wf = patch_video_basic(
+            image_path=image_path,
+            bg_prompt=s.bg_prompt or "",
+            sfx_prompt=s.sfx_prompt or "ambient indoor sounds",
+            loras=_parse_loras(s.loras_json),
+            diffusion_model=s.diffusion_model,
+            params={
+                **video_params,
+                **({"voice_path": s.voice_path} if s.voice_path else {}),
+            },
+            output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
+        )
     elif s.type == SceneType.loop:
         if not image_path:
             raise HTTPException(400, "루프 씬은 기준 이미지가 필요합니다.")
@@ -276,7 +336,10 @@ async def regenerate_video(
             sfx_prompt=s.sfx_prompt or "ambient indoor sounds",
             loras=_parse_loras(s.loras_json),
             diffusion_model=s.diffusion_model,
-            params=video_params,
+            params={
+                **video_params,
+                **({"voice_path": s.voice_path} if s.voice_path else {}),
+            },
             output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
         )
     elif s.type == SceneType.effect:
@@ -288,13 +351,16 @@ async def regenerate_video(
             sfx_prompt=s.sfx_prompt or "impact whoosh",
             loras=_parse_loras(s.loras_json),
             diffusion_model=s.diffusion_model,
-            params=video_params,
+            params={
+                **video_params,
+                **({"voice_path": s.voice_path} if s.voice_path else {}),
+            },
             output_prefix=f"projects/{project_id}/scenes/{scene_id}/video",
         )
     else:
         raise HTTPException(400, f"알 수 없는 씬 타입: {s.type}")
 
-    out = await comfy.run_workflow(wf, kind="video")
+    out = await comfy.run_workflow(wf, kind="video", execution_targets=find_video_output_targets(wf) or None)
     dest = OUTPUT_DIR / f"scene_{scene_id}{out.suffix}"
     shutil.copy(out, dest)
 

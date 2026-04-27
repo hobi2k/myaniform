@@ -17,15 +17,13 @@
 sudo apt install -y git git-lfs ffmpeg build-essential
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2) 클론 + 의존성
+# 2) 클론 + 토큰
 git clone https://github.com/hobi2k/myaniform.git && cd myaniform
-bash setup.sh
+echo '<HF_TOKEN>' > .hf_token           # Qwen3-TTS 등 gated 모델
+echo '<CIVITAI_TOKEN>' > .civitai_token # DaSiWa/SmoothMix/FastFidelity 모델
 
-# 3) 모델 (~150GB)
-echo '<HF_TOKEN>' > .hf_token           # Qwen3-TTS (gated) 가 필요하면
-echo '<CIVITAI_TOKEN>' > .civitai_token # Civitai 모델이 필요하면
-bash download_models.sh
-bash check_models.sh
+# 3) 의존성 + custom_nodes + 모델 자동 다운로드/검증
+bash setup.sh
 
 # 4) 실행
 bash run.sh                             # ComfyUI + FastAPI (백그라운드)
@@ -33,6 +31,15 @@ cd frontend && npm run dev              # :5173 (별도 터미널)
 ```
 
 접속: http://localhost:5173
+
+설치 검증:
+
+```bash
+bash check_models.sh
+
+# ComfyUI(:8188)가 켜진 상태에서 원본 이미지/I2V 워크플로우 + MMAudio까지 실제 큐에 태우는 4장면 smoke test
+./.venv/bin/python scripts/generate_romance_smoke.py
+```
 
 ### 서버 끄기
 
@@ -65,8 +72,8 @@ ps -ef | rg "ComfyUI/main.py|uvicorn backend.main:app|vite"
 - [operations](docs/operations.md) — run.sh 플래그, sageattention OOM fix, 로그, 메모리 튜닝, 장애 대응
 - [models-and-nodes](docs/models-and-nodes.md) — 모델 경로·커스텀 노드 목록
 - [pipeline](docs/pipeline.md) — 데이터 플로우 (씬 → voice → image → video → concat)
+- [gold-fixture](docs/gold-fixture.md) — reference video 기반 구조적 품질 프로파일/검증
 - [status](docs/status.md) — 현재 동작 범위·성능 수치
-- [roadmap](docs/roadmap.md) — 계획
 - [tts-comparison](docs/tts-comparison.md) — Qwen3 vs S2Pro vs VoiceDesign
 - [comfyui-workflow-design](docs/comfyui-workflow-design.md) — 설계 근거
 
@@ -76,7 +83,8 @@ ps -ef | rg "ComfyUI/main.py|uvicorn backend.main:app|vite"
 
 ```
 myaniform/
-├── ComfyUI/                   # embedded (custom_nodes 포함 — 클론 시 함께 복제됨)
+├── ComfyUI/                   # embedded ComfyUI 본체
+├── comfy_custom_nodes/        # myaniform 로컬 ComfyUI 확장 템플릿
 ├── backend/                   # FastAPI
 │   ├── main.py
 │   ├── models.py              # SQLModel (Project·Character·Scene)
@@ -89,7 +97,7 @@ myaniform/
 ├── output/                    # 산출물
 ├── myaniform.db               # SQLite (런타임 생성)
 ├── docs/
-├── setup.sh                   # uv venv + 의존성 + sageattention
+├── setup.sh                   # custom_nodes clone + uv venv + 의존성 + sageattention + 모델 자동 다운로드/검증
 ├── download_models.sh         # HF + Civitai 자동 다운로드 (이어받기 지원)
 ├── check_models.sh            # 필수 모델 존재 검증
 └── run.sh                     # ComfyUI + FastAPI 런처

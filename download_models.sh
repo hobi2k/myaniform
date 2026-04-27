@@ -133,7 +133,8 @@ civitai_dl() {
     fi
     if [ -z "$CIVITAI_TOKEN" ]; then
         printf "  ✗ %-55s  (CIVITAI_TOKEN 없음, 스킵)\n" "$dest_name"
-        return 1
+        FAILED_DOWNLOADS+=("civitai:$vid (CIVITAI_TOKEN 없음)")
+        return 0
     fi
     mkdir -p "$dest_dir"
     if [ -s "$full" ]; then
@@ -171,6 +172,8 @@ download_hf() {
     echo "━━━ WanVideo 공통 (T5 + VAE) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     hf_dl "Kijai/WanVideo_comfy" "umt5-xxl-enc-bf16.safetensors"          "$MODELS/text_encoders"
     hf_dl "Kijai/WanVideo_comfy" "Wan2_1_VAE_bf16.safetensors"            "$MODELS/vae"
+    hf_dl "Comfy-Org/Wan_2.2_ComfyUI_Repackaged" "split_files/vae/wan_2.1_vae.safetensors" \
+          "$MODELS/vae" "wan_2.1_vae.safetensors"
 
     echo ""
     echo "━━━ Wan 2.2 I2V 14B High/Low (bf16) ━━━━━━━━━━━━━━━━━━━━━━"
@@ -185,10 +188,13 @@ download_hf() {
     echo "━━━ S2V Audio Encoder (wav2vec2 large english) ━━━━━━━━━━━"
     hf_dl "Wan-AI/Wan2.2-S2V-14B" "wav2vec2-large-xlsr-53-english/model.safetensors" \
           "$MODELS/audio_encoders" "wav2vec2_large_english_fp32.safetensors"
+    hf_dl "Comfy-Org/Wan_2.2_ComfyUI_Repackaged" "split_files/audio_encoders/wav2vec2_large_english_fp16.safetensors" \
+          "$MODELS/audio_encoders" "wav2vec2_large_english_fp16.safetensors"
 
     echo ""
     echo "━━━ MMAudio (SFX 생성) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     hf_dl "Kijai/MMAudio_safetensors" "mmaudio_large_44k_v2_fp16.safetensors"        "$MODELS/mmaudio"
+    hf_dl "phazei/NSFW_MMaudio" "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" "$MODELS/mmaudio"
     hf_dl "Kijai/MMAudio_safetensors" "mmaudio_vae_44k_fp16.safetensors"             "$MODELS/mmaudio"
     hf_dl "Kijai/MMAudio_safetensors" "mmaudio_synchformer_fp16.safetensors"         "$MODELS/mmaudio"
     hf_dl "Kijai/MMAudio_safetensors" "apple_DFN5B-CLIP-ViT-H-14-384_fp16.safetensors" "$MODELS/mmaudio"
@@ -263,6 +269,11 @@ download_hf() {
           "$MODELS/ultralytics/bbox" "hand_yolov8s.pt"
 
     echo ""
+    echo "━━━ 이미지 워크플로우 segmentation 모델 ━━━━━━━━━━━━━━━━━━"
+    hf_dl "Bingsu/adetailer" "person_yolov8m-seg.pt" \
+          "$MODELS/ultralytics/segm" "person_yolov8m-seg.pt"
+
+    echo ""
     echo "━━━ (Legacy) IP-Adapter FaceID — 호환성 유지 ━━━━━━━━━━━━━━"
     # Qwen Edit 파이프라인이 기본. IPAdapter는 SDXL-only 대체 경로용.
     hf_dl "h94/IP-Adapter-FaceID" "ip-adapter-faceid-plusv2_sdxl.bin"                "$MODELS/ipadapter"
@@ -286,18 +297,23 @@ download_hf() {
         "ILFlatMix.safetensors"
 
     echo ""
+    echo "━━━ Animagine XL 3.1 체크포인트 (원본 이미지 워크플로우) ━━━"
+    hf_dl "LyliaEngine/animagineXLV31_v31" "animagineXLV31_v31.safetensors" \
+          "$MODELS/checkpoints" "animagineXLV31_v31.safetensors"
+
+    echo ""
     echo "━━━ SDXL Text Encoder (CLIP G, 루프용 이미지 생성) ━━━━━━━━"
     hf_dl "comfyanonymous/flux_text_encoders" "clip_l.safetensors"                   "$MODELS/clip"
 
-    # ─── Qwen3-TTS (gated, HF_TOKEN 필요, FL-Qwen3TTS 노드용) ───
-    # 저장 경로: ComfyUI/models/tts/Qwen3TTS/<variant>/ (노드 규약)
+    # ─── Qwen3-TTS (gated, HF_TOKEN 필요, ComfyUI_Qwen3-TTS 노드용) ───
+    # 저장 경로: ComfyUI/models/Qwen3-TTS/<variant>/ (hobi2k 노드 규약)
     if [ -z "$HF_TOKEN" ]; then
         echo ""
         echo "━━━ Qwen3-TTS (HF_TOKEN 없음, 스킵) ━━━━━━━━━━━━━━━━━━━━━━"
         return
     fi
 
-    local Q3BASE="$MODELS/tts/Qwen3TTS"
+    local Q3BASE="$MODELS/Qwen3-TTS"
 
     echo ""
     echo "━━━ Qwen3-TTS Base (1.7B, 음성 클로닝·파인튜닝) ━━━━━━━━━━"
@@ -369,6 +385,10 @@ download_civitai() {
     echo ""
     echo "━━━ Civitai — SmoothMix Ultimate (루프 I2V High 대체) ━━━━"
     civitai_dl "2746772" "$MODELS/diffusion_models/wan_i2v_high" "smoothmixUltimate_illustriousV20.safetensors"
+
+    echo ""
+    echo "━━━ Civitai — DaSiWa Wan 2.2 S2V FastFidelity ━━━━━━━━━━━"
+    civitai_dl "2433140" "$MODELS/diffusion_models/wan_s2v" "DasiwaWan2214BS2V_littledemonV2.safetensors"
 
     echo ""
     echo "━━━ Civitai — SmoothMix LoRA (애니메이션 모션) ━━━━━━━━━━━"

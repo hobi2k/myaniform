@@ -1,7 +1,10 @@
 # ComfyUI 워크플로우 카탈로그
 
-모든 워크플로우는 **API 포맷** JSON (ComfyUI `/prompt` 엔드포인트용).
-`backend/services/workflow_patcher.py` 가 런타임에 입력값·모델명·LoRA 를 주입.
+런타임 워크플로우는 세 종류다.
+
+- 로컬 API 포맷 JSON: 음성, 립싱크, 후처리처럼 앱 전용으로 관리하는 워크플로우.
+- 원본 ComfyUI UI-export JSON: `workflows/originals/`에 벤더링한 원본을 `ui_workflow_adapter` 로 API prompt로 변환한 뒤 입력값·모델명·LoRA 를 주입한다.
+- standalone export JSON: `workflows/standalone/payload/`에 저장된, myaniform 없이 ComfyUI `/prompt`에 직접 제출 가능한 실행본.
 
 ---
 
@@ -9,32 +12,38 @@
 
 | 파일 | 단계 | 주입 함수 | 설명 |
 |---|---|---|---|
-| `ws_tts_clone.json` | voice | `patch_voice()` | Qwen3-TTS 1.7B **Base** 로 보이스 클론 (x_vector 모드) |
+| `ws_tts_clone.json` | voice | `patch_voice()` | hobi2k Qwen3-TTS Base로 x-vector clone prompt를 만들고 CustomVoice로 렌더링 |
 | `ws_tts_s2pro.json` | voice | `patch_voice()` | Fish Audio S2 Pro 로 보이스 클론 |
-| `ws_voice_design.json` | voice | `patch_voice()` / `patch_voice_design()` | 레퍼런스 없이 묘사 텍스트만으로 Qwen3 VoiceDesign 생성 |
-| `ws_image_sdxl.json` | image | `patch_image(workflow="sdxl")` | **SDXL Illustrious 30-step + 2-pass FaceDetailer** (2026-04-20 신규 — 기본 캐릭터 생성 경로) |
-| `ws_scene_keyframe.json` | image | `patch_image(workflow="qwen_edit")` | Qwen Image Edit 2511 로 N-캐릭터 일관성 유지 (`image1..imageN`) |
-| `ws_character_sheet.json` | image | `patch_character_sheet()` | VNCCS 간이 턴어라운드 시트 (SDXL + `vn_character_sheet_v4` LoRA) |
-| `vnccs_step1_sheet_ui.json` | (뷰어) | — | VNCCS 본 파이프라인 Step1 — ComfyUI `/workflows` 에서 수동 실행 |
-| `vnccs_step1_1_clone_ui.json` | (뷰어) | — | VNCCS Step1.1 (외부 레퍼런스 캐릭터 클론) |
-| `vnccs_step4_sprite_ui.json` | (뷰어) | — | VNCCS Step4 (투명배경 스프라이트 추출) |
-| `ws_char_create.json` | image | (legacy) | 더 이상 기본 경로 아님 — `ws_image_sdxl.json` 로 대체 |
-| `ws_char_clone.json` | image | (legacy) | 비활성 |
-| `ws_loop.json` | video | `patch_video_loop()` | **WanVideoWrapper** I2V FLF(start=end) 2-stage HIGH+LOW 루프 |
-| `ws_effect.json` | video | `patch_video_effect()` | **WanVideoWrapper** I2V FLF(start+end 분리) 2-stage 이펙트 |
-| `ws_lipsync.json` | video | `patch_video_lipsync()` | Wan 2.2 S2V 14B Q4 GGUF 립싱크 (코어 노드) |
-| `ws_concat.json` | (unused) | — | ffmpeg 쪽에서 xfade 로 대체 |
+| `ws_voice_design.json` | voice | `patch_voice()` / `patch_voice_design()` | hobi2k DirectedCloneFromVoiceDesign으로 묘사 기반 보이스를 일관된 CustomVoice 출력으로 렌더링 |
+| `이미지 워크플로우.json` | image | `patch_image(workflow="qwen_edit")` | 원본 이미지 워크플로우에 Qwen Image Edit 2511 브랜치를 주입해 N-캐릭터 일관성 유지 (`image1..imageN`). 의상/포즈/구도/카메라 등 장면 연출은 사용자 프롬프트만 반영 |
+| `VN_Step1_QWEN_CharSheetGenerator_v1.json` | image | `patch_character_sheet()` | 신규 캐릭터 스프라이트/시트 원본 워크플로우 |
+| `VN_Step1.1_QWEN_Clone_Existing_Character_v1.json` | image | `patch_character_sprite_existing()` | 업로드한 참조 이미지/기존 생성 자산을 기준으로 스프라이트/시트 재생성 |
+| `동영상 루프 워크플로우.json` | video | `patch_video_loop()` | 원본 **WanVideoWrapper** I2V FLF(start=end) 2-stage HIGH+LOW 루프 |
+| `동영상 첫끝프레임 워크플로우.json` | video | `patch_video_effect()` | 원본 **WanVideoWrapper** I2V FLF(start+end 분리) 2-stage 이펙트 |
+| `Wan2.2-S2V_ Audio-Driven Video Generation.json` | video | `patch_video_lipsync()` | 원본 S2V branch 기반 FastFidelity 립싱크. DaSiWa S2V 모델 + 4step/cfg8/shift5 + MMAudio 믹스 |
 
 ---
 
 ## 비디오 워크플로우 상세
 
-### `ws_loop.json` / `ws_effect.json` — I2V 2-stage (WanVideoWrapper)
+### `동영상 루프 워크플로우.json` / `동영상 첫끝프레임 워크플로우.json` — I2V 2-stage (WanVideoWrapper)
 
-**2026-04-19 전환**: 기존 `UnetLoaderGGUF + KSamplerAdvanced + rgthree Power Lora` 기반에서
-`ComfyUI-WanVideoWrapper` 기반 노드 체인으로 전환 (OOM 방지 — [operations.md#sageattention-oom-fix](operations.md#sageattention-oom-fix) 참고).
+런타임은 로컬 축약판이 아니라 repo에 포함된 다음 원본 UI-export를 직접 읽는다.
 
-레퍼런스: `D:\...\Wan 2_2 Reasoning Loops v1_0.json` (Windows 환경 메모리 세이프 레시피).
+- `workflows/originals/동영상 루프 워크플로우.json`
+- `workflows/originals/동영상 첫끝프레임 워크플로우.json`
+
+FastAPI 뷰어 alias:
+
+- `video_loop_original`
+- `video_effect_original`
+주의: `DaSiWa WAN 2.2 i2v FastFidelity C-AiO-65.json`, `DaSiWa WAN 2.2 i2v FastFidelity C-SVI-29.json` 는 그대로 실행/선택하지 않는다. 이 파일들은 I2V/FLF2V/S2V/Audio/Combine 이 섞인 올인원 레퍼런스라서, 앱에는 S2V에 실제 필요한 서브구조만 추출해서 포팅해야 한다.
+
+MMAudio SFX:
+
+- S2V 립싱크는 `LoadAudio` TTS와 `MMAudioSampler` SFX를 `GeekyAudioMixer`에서 섞은 뒤 `VHS_VideoCombine.audio`로 연결한다.
+- I2V 루프/첫끝프레임 원본 워크플로우에는 런타임에서 MMAudio SFX branch를 후단 주입한다. 원본 프레임 생성 그래프는 유지하고, 최종 `VHS_VideoCombine.audio`에 SFX를 연결한다.
+- MoanForge 레퍼런스에서 가져오는 것은 전체 워크플로우가 아니라 SFW/NSFW MMAudio 모델 선택, prompt/negative, steps/cfg/duration, 믹서 볼륨 구조다.
 
 **노드 그래프 (API id 기준, loop/effect 공통)**:
 
@@ -106,8 +115,8 @@
 
 | 워크플로우 | 해상도 | num_frames | 길이 (RIFE 전/후) |
 |---|---|---|---|
-| `ws_loop.json` | 480×832 | 49 | 3s @ 16fps → 6s @ 32fps |
-| `ws_effect.json` | 480×832 | 49 | 3s @ 16fps → 6s @ 32fps |
+| `동영상 루프 워크플로우.json` | 480×832 | 49 | 3s @ 16fps → 6s @ 32fps |
+| `동영상 첫끝프레임 워크플로우.json` | 480×832 | 49 | 3s @ 16fps → 6s @ 32fps |
 
 Wan 2.2 는 480×832 (9:16) 에서 학습 최적 — 임의 해상도 사용 시 activation 메모리 폭증.
 
@@ -119,26 +128,25 @@ Wan 2.2 는 480×832 (9:16) 에서 학습 최적 — 임의 해상도 사용 시
 | ColorMatch strength | 1.0 | 0.5 |
 | MMAudio duration | 5.0s | 3.0s |
 
-### `ws_lipsync.json` — S2V 립싱크
+### `Wan2.2-S2V_ Audio-Driven Video Generation.json` — FastFidelity S2V 립싱크
 
-**노드는 아직 코어 ComfyUI 체인** (WanVideoWrapper 로 전환 안 됨).
+런타임 기본 립싱크는 원본 S2V 워크플로우를 변환해서 사용한다.
 
-Wan2.2 S2V 14B (GGUF Q4_K_M).
+기본 모델: `wan_s2v/DasiwaWan2214BS2V_littledemonV2.safetensors`.
 
 **핵심 노드**:
 
-- `UnetLoaderGGUF` (1) — S2V 모델 로드
-- `AudioEncoderLoader` (4) — wav2vec2 large English fp32
-- `AudioEncoderEncode` (7) — 음성 → 임베딩
-- `WanSoundImageToVideo` (10) — 음성+이미지 → latent
-- `KSamplerAdvanced` (11) — steps=20, cfg=5.0, euler, simple
-- `VAEDecode` (12) → `ColorMatch` (50, strength=0.5) → `RIFE VFI` (51) → `VHS_VideoCombine` (17)
-- 음성 믹싱: `GeekyAudioMixer` (16) — 대사 1.0 + MMAudio SFX 0.35 (10s 고정)
+- `UNETLoader` — DaSiWa FastFidelity S2V safetensors
+- `ModelSamplingSD3` — shift=5
+- `AudioEncoderLoader` — `wav2vec2_large_english_fp16.safetensors`
+- `AudioCropProcessUTK` — TTS 음성 crop/resample
+- `AudioEncoderEncode` — 음성 → S2V audio embedding
+- `WanSoundImageToVideo` — 음성+이미지 → latent
+- `KSamplerAdvanced` high/refiner — 기본 steps=4, cfg=8, euler/simple, split 0→2→end
+- `VAEDecode` → `VHS_VideoCombine`
+- 앱 주입 MMAudio: `MMAudioSampler` → `GeekyAudioMixer` — TTS 1.0 + SFX 0.35
 
-**해상도**: 832×1216, length=81 (≈ 5s @ 16fps → 10s @ 32fps).
-**소요시간**: ~50분/씬 (20 step × ~150s).
-
-**FastFidelity 포팅 후보**(미적용): `DasiwaWan2214BS2V_littledemonV2.safetensors` + steps=4 + cfg=8 + CFGZeroStar 로 10배 단축 가능. 모델(18.5GB) 별도 다운로드 필요. 참고: [operations.md#fastfidelity-참고](operations.md#fastfidelity-참고).
+**주의**: FastFidelity 기본 경로는 safetensors `UNETLoader`만 허용한다.
 
 ---
 
@@ -146,10 +154,10 @@ Wan2.2 S2V 14B (GGUF Q4_K_M).
 
 ### `ws_tts_clone.json` — Qwen3-TTS VoiceClone
 
-**중요**: `x_vector_only_mode=true` 로 설정 (2026-04-18 수정).
+**중요**: hobi2k `ComfyUI_Qwen3-TTS` 노드만 사용한다. FL_Qwen3TTS 런타임 워크플로우는 제거되었다.
 
-- `false` + `ref_text` 미제공 시 **silent 1초 플레이스홀더** 출력 (노드 내부 except 처리)
-- `true` = x-vector 임베딩만으로 화자 특성 복사, ref_text 불필요
+- `Qwen3ClonePromptFromAudio` 에서 `x_vector_only_mode=true`
+- `Qwen3CustomVoiceFromPrompt` 가 clone prompt를 받아 최종 음성을 렌더링
 - 레퍼런스 오디오 길이 권장: 3초 이상
 
 ### `ws_tts_s2pro.json` — Fish Audio S2 Pro
@@ -164,7 +172,7 @@ ref_text 불필요. 더 자연스럽지만 모델 로드 시간·VRAM 소비 큼
 
 ## 이미지 워크플로우 상세
 
-### `ws_image_sdxl.json` — SDXL 고품질 키프레임 (2026-04-20 신규, 기본 폴백)
+### `이미지 워크플로우.json` + Qwen Image Edit — 장면샷
 
 레퍼런스 `이미지 워크플로우.json` 1:1 포팅. SDXL Illustrious + 30-step euler_ancestral + SAM+YOLO 기반 FaceDetailer/HandDetailer 체인.
 
@@ -193,7 +201,7 @@ SaveImage(70)
 **필수 모델**: `waiIllustriousSDXL_v160.safetensors`, `sam_vit_b_01ec64.pth`,
 `ultralytics/bbox/face_yolov8m.pt`, `ultralytics/bbox/hand_yolov8s.pt`.
 
-**커스텀 노드**: `ComfyUI-Impact-Pack` + `ComfyUI-Impact-Subpack` (벤더링 완료).
+**커스텀 노드**: `ComfyUI-Impact-Pack` + `ComfyUI-Impact-Subpack` (`setup.sh` / `setup.ps1` 자동 clone/pull).
 
 **파라미터 주입** (`_apply_image_params`):
 - `steps/cfg/sampler/scheduler/seed/denoise` → KSampler(30) (FaceDetailer 는 유지)
@@ -202,9 +210,12 @@ SaveImage(70)
 - `params.face_detailer=false` → 노드 60/61 제거, SaveImage 입력을 VAEDecode 로 직결
 - `params.hand_detailer=false` → 노드 61 만 제거, SaveImage 입력을 FaceDetailer(60) 로
 
-### `ws_scene_keyframe.json` — Qwen Image Edit 2511 (N-캐릭터)
+### `이미지 워크플로우.json` + Qwen Image Edit 2511 — 장면샷 (N-캐릭터)
 
 캐릭터 레퍼런스 **1~N 개** 이미지를 조건으로 새 장면을 편집 생성.
+이 단계에서 Qwen Image Edit은 캐릭터 얼굴/머리/체형/정체성 일관성을 위한 레퍼런스 역할만 한다.
+의상, 포즈, 구도, 카메라, 표정, 조명, 스타일은 `scene.bg_prompt` 와 `scene.image_params` 의 사용자 입력 필드만 합쳐 사용한다.
+비어 있는 연출 필드는 런타임에서 아무것도 추가하지 않는다.
 
 - `LoadImage(10)` = 첫 번째 캐릭터 레퍼런스 (staged `charref_0.{ext}`)
 - `LoadImage(11)` = 두 번째 (staged `charref_1.{ext}`, 1인 씬에서는 노드 자체 제거)
@@ -216,21 +227,14 @@ SaveImage(70)
 - 2명: `"Picture 1 shows (A) A설명. Picture 2 shows (B) B설명. Both characters appear together in the same scene. 씬 설명"`
 - 3명 이상: `". ".join(Picture i shows …) + ". All N characters appear together in the same scene. 씬 설명"`
 
-캐릭터 레퍼런스 우선순위: **sprite_path > sheet_path > image_path** (투명 배경 스프라이트가 가장 깨끗한 합성을 만듦).
+캐릭터 레퍼런스: **sprite_path 필수**. 장면샷 UI는 업로드 이미지를 받지 않고, 먼저 생성된 캐릭터 스프라이트를 사용한다.
 
-**자동 폴백**:
-- Qwen Image Edit GGUF 미설치 → `ws_image_sdxl.json` (SDXL t2i)
-- 레퍼런스 이미지가 하나도 없으면 → `ws_image_sdxl.json`
+**품질 정책**:
+- Qwen Image Edit GGUF/노드/스프라이트가 없으면 대체 경로로 넘기지 않고 오류로 중단한다.
+- 속도를 위해 SDXL 텍스트 이미지나 간이 그래프로 몰래 대체하지 않는다.
+- 장면 연출 값은 사용자가 넣은 값만 반영한다. 의상이나 노출 상태도 앱이 강제하지 않는다.
 
-### `ws_character_sheet.json` — VNCCS 간이 시트 (SDXL)
-
-`waiIllustriousSDXL_v160` + `vn_character_sheet_v4.safetensors` LoRA (strength 0.9 / 1.0) + 1536×1024 wide canvas. 프롬프트 키워드 `character sheet, turnaround, front view, side view, back view, full body`.
-
-본격 VNCCS 파이프라인 (`vnccs_step1_sheet_ui.json`, `vnccs_step1_1_clone_ui.json`, `vnccs_step4_sprite_ui.json`) 은 ComfyUI `/workflows` 뷰어에서 수동 실행 — `/workflows?workflow=vnccs_step1_sheet_ui` 링크가 프론트 캐릭터 패널에 노출되어 있음.
-
-### `ws_char_create.json` — SDXL 텍스트→이미지 (legacy)
-
-2026-04-20 이후 `ws_image_sdxl.json` 가 기본 폴백 — 이 파일은 비활성.
+스프라이트 신규 생성은 `VN_Step1_QWEN_CharSheetGenerator_v1.json`, 참조 이미지 기반 복제는 `VN_Step1.1_QWEN_Clone_Existing_Character_v1.json` 만 사용한다.
 
 ---
 

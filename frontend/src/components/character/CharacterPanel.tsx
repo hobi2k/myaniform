@@ -1,8 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Layers, Mic, Plus, Settings2, Trash2, Upload, User, Wand2, X } from "lucide-react";
+import { Image as ImageIcon, Mic, Plus, Settings2, Trash2, Upload, User, Wand2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { api } from "../../api";
+import {
+  DEFAULT_IMAGE_PARAMS,
+  DEFAULT_IMAGE_SAMPLER,
+  DEFAULT_IMAGE_SCHEDULER,
+  IMAGE_SCHEDULER_OPTIONS,
+  SAMPLER_OPTIONS,
+} from "../../constants/modelCatalog";
 import type { Character, ImageParams, LoraSelection, VoiceGenParams } from "../../types";
+import { ImageModelPicker } from "../model/ModelPickers";
 import Button from "../ui/Button";
 
 interface Props {
@@ -29,7 +37,7 @@ interface CharacterTaskEvent {
 }
 
 interface CharacterTaskState {
-  kind: "image" | "sheet" | "voice" | null;
+  kind: "image" | "sprite" | "voice" | null;
   label: string;
   stage: CharacterTaskStage;
   message: string;
@@ -52,13 +60,18 @@ const IDLE_TASK: CharacterTaskState = {
   running: false,
 };
 
-function parseJson<T>(s: string | null | undefined, fallback: T): T {
-  if (!s) return fallback;
+function parseJson<T>(s: string | null | undefined, defaultValue: T): T {
+  if (!s) return defaultValue;
   try {
-    return { ...fallback, ...JSON.parse(s) };
+    return { ...defaultValue, ...JSON.parse(s) };
   } catch {
-    return fallback;
+    return defaultValue;
   }
+}
+
+function assetUrl(path: string | null | undefined, version: number) {
+  if (!path) return "";
+  return `/${path}?v=${version}`;
 }
 
 export default function CharacterPanel({ projectId }: Props) {
@@ -71,6 +84,7 @@ export default function CharacterPanel({ projectId }: Props) {
   const [selected, setSelected] = useState<Character | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
+  const [assetVersion, setAssetVersion] = useState(() => Date.now());
 
   const createMutation = useMutation({
     mutationFn: () => api.characters.create(projectId, { name: newName }),
@@ -136,7 +150,7 @@ export default function CharacterPanel({ projectId }: Props) {
             >
               {c.image_path ? (
                 <img
-                  src={`/${c.image_path}`}
+                  src={assetUrl(c.image_path, assetVersion)}
                   className="w-7 h-7 rounded-full object-cover ring-1 ring-white/10 flex-shrink-0"
                 />
               ) : (
@@ -165,8 +179,10 @@ export default function CharacterPanel({ projectId }: Props) {
           <CharacterEditor
             key={selected.id}
             character={selected}
+            assetVersion={assetVersion}
             projectId={projectId}
             onUpdated={(c) => {
+              setAssetVersion(Date.now());
               setSelected(c);
               qc.invalidateQueries({ queryKey: ["characters", projectId] });
             }}
@@ -185,19 +201,33 @@ export default function CharacterPanel({ projectId }: Props) {
 
 function CharacterEditor({
   character,
+  assetVersion,
   projectId,
   onUpdated,
   onDelete,
 }: {
   character: Character;
+  assetVersion: number;
   projectId: string;
   onUpdated: (c: Character) => void;
   onDelete: () => void;
 }) {
-  const imageInputRef = useRef<HTMLInputElement>(null);
+  const referenceImageInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
 
   const [desc, setDesc] = useState(character.description ?? "");
+  const [backgroundColor, setBackgroundColor] = useState(character.background_color ?? "green");
+  const [aesthetics, setAesthetics] = useState(character.aesthetics ?? "masterpiece");
+  const [nsfw, setNsfw] = useState<boolean>(character.nsfw ?? true);
+  const [sex, setSex] = useState(character.sex ?? "female");
+  const [age, setAge] = useState<number | "">(character.age ?? 18);
+  const [race, setRace] = useState(character.race ?? "human");
+  const [eyes, setEyes] = useState(character.eyes ?? "");
+  const [hair, setHair] = useState(character.hair ?? "");
+  const [face, setFace] = useState(character.face ?? "");
+  const [body, setBody] = useState(character.body ?? "");
+  const [skinColor, setSkinColor] = useState(character.skin_color ?? "");
+  const [loraPrompt, setLoraPrompt] = useState(character.lora_prompt ?? "");
   const [negativePrompt, setNegativePrompt] = useState(character.negative_prompt ?? "");
   const [voiceDesign, setVoiceDesign] = useState(character.voice_design ?? "");
   const [voiceSampleText, setVoiceSampleText] = useState(character.voice_sample_text ?? "안녕하세요.");
@@ -207,10 +237,15 @@ function CharacterEditor({
   );
   const [resolutionW, setResolutionW] = useState<number | "">(character.resolution_w ?? "");
   const [resolutionH, setResolutionH] = useState<number | "">(character.resolution_h ?? "");
-  const [imageParams, setImageParams] = useState<ImageParams>(
-    parseJson<ImageParams>(character.image_params, {}),
+  const [spriteParams, setSpriteParams] = useState<ImageParams>(
+    parseJson<ImageParams>(character.sprite_params, parseJson<ImageParams>(character.image_params, DEFAULT_IMAGE_PARAMS)),
   );
+  const [imageParams, setImageParams] = useState<ImageParams>(
+    parseJson<ImageParams>(character.image_params, DEFAULT_IMAGE_PARAMS),
+  );
+  const [showSpriteAdvanced, setShowSpriteAdvanced] = useState(false);
   const [showImageAdvanced, setShowImageAdvanced] = useState(false);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [showVoiceAdvanced, setShowVoiceAdvanced] = useState(false);
   const [task, setTask] = useState<CharacterTaskState>(IDLE_TASK);
 
@@ -220,20 +255,8 @@ function CharacterEditor({
     onSuccess: onUpdated,
   });
 
-  const uploadImageMutation = useMutation({
-    mutationFn: (file: File) => api.characters.uploadImage(projectId, character.id, file),
-    onSuccess: onUpdated,
-  });
-
-  // Phase 4: VNCCS 시트 / 스프라이트
-  const sheetInputRef = useRef<HTMLInputElement>(null);
-  const spriteInputRef = useRef<HTMLInputElement>(null);
-  const uploadSheetMutation = useMutation({
-    mutationFn: (file: File) => api.characters.uploadSheet(projectId, character.id, file),
-    onSuccess: onUpdated,
-  });
-  const uploadSpriteMutation = useMutation({
-    mutationFn: (file: File) => api.characters.uploadSprite(projectId, character.id, file),
+  const uploadReferenceImageMutation = useMutation({
+    mutationFn: (file: File) => api.characters.uploadReferenceImage(projectId, character.id, file),
     onSuccess: onUpdated,
   });
 
@@ -250,10 +273,23 @@ function CharacterEditor({
   const persistCharacterOptions = () =>
     api.characters.update(projectId, character.id, {
       description: desc,
+      background_color: backgroundColor,
+      aesthetics,
+      nsfw,
+      sex,
+      age: age === "" ? null : age,
+      race,
+      eyes,
+      hair,
+      face,
+      body,
+      skin_color: skinColor,
+      lora_prompt: loraPrompt,
       negative_prompt: negativePrompt,
       resolution_w: resolutionW === "" ? null : resolutionW,
       resolution_h: resolutionH === "" ? null : resolutionH,
       image_params: JSON.stringify(imageParams),
+      sprite_params: JSON.stringify(spriteParams),
       voice_sample_text: voiceSampleText,
       voice_language: voiceLanguage,
       voice_params: JSON.stringify(voiceParams),
@@ -272,7 +308,7 @@ function CharacterEditor({
     body,
     beforeStart,
   }: {
-    kind: "image" | "sheet" | "voice";
+    kind: "image" | "sprite" | "voice";
     label: string;
     url: string;
     body?: unknown;
@@ -363,15 +399,20 @@ function CharacterEditor({
       beforeStart: () => persistCharacterOptions().then(() => undefined),
     });
 
-  const startSheetGeneration = () =>
+  const startSpriteGeneration = (mode: "new" | "reference") =>
     runTaskStream({
-      kind: "sheet",
-      label: "캐릭터 시트 생성",
-      url: `/api/projects/${projectId}/characters/${character.id}/sheet/generate/stream`,
+      kind: "sprite",
+      label: mode === "new" ? "신규 스프라이트 생성" : "참조 이미지 기반 스프라이트 생성",
+      url: `/api/projects/${projectId}/characters/${character.id}/sprite/generate/stream?mode=${mode}`,
       beforeStart: () => persistCharacterOptions().then(() => undefined),
     });
 
   const generationBusy = task.running;
+  const hasSprite = !!character.sprite_path;
+  const hasReferenceImage = !!character.image_path;
+  const hasImage = !!character.image_path && character.image_path.includes("_generated");
+  const spriteBlocked = !desc.trim();
+  const imageBlocked = !hasSprite;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -382,217 +423,326 @@ function CharacterEditor({
         </button>
       </div>
 
-      {/* 이미지 섹션 */}
-      <div>
-        <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wider">캐릭터 이미지</p>
-        <div className="flex gap-3 items-start">
-          <div className="w-24 h-24 bg-surface-overlay rounded-xl overflow-hidden flex-shrink-0 border border-white/10 shadow-card">
-            {character.image_path ? (
-              <img src={`/${character.image_path}`} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <User className="w-8 h-8 text-gray-600" />
-              </div>
-            )}
+      <div className="rounded-xl border border-accent/20 bg-accent/5 p-3">
+        <p className="text-xs font-semibold text-accent mb-1">권장 순서</p>
+        <p className="text-sm text-gray-300">
+          1. 캐릭터 스프라이트 생성/복제 → 2. 씬에서 스프라이트 기반 장면샷 생성 → 3. 영상 생성
+        </p>
+        <p className="text-[11px] text-gray-500 mt-1">
+          신규 스프라이트는 VN Step1, 참조 이미지 기반 스프라이트는 VN Step1.1 원본 워크플로우를 사용합니다.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-surface-overlay/30 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">0. 캐릭터 설정</p>
+            <p className="text-sm text-gray-300">설명과 세부 속성을 먼저 정리합니다.</p>
           </div>
-          <div className="flex-1 space-y-2 min-w-0">
-            <textarea
-              className="input-base w-full resize-none h-16"
-              placeholder="1girl, brown hair, bob cut, 30s, gentle expression, anime style..."
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-            />
-            <div className="border-t border-white/10 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowImageAdvanced((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-accent transition-colors"
-              >
-                <Settings2 className="w-3.5 h-3.5" />
-                고급 옵션 {showImageAdvanced ? "▲" : "▼"}
-              </button>
-              {showImageAdvanced && (
-                <div className="mt-3 space-y-3 bg-surface-raised/40 rounded-lg p-3 border border-white/5">
-                  <div>
-                    <label className="text-[11px] text-gray-400 mb-1 block">Negative Prompt</label>
-                    <textarea
-                      className="input-base w-full resize-none h-14"
-                      placeholder="worst quality, low quality, blurry, text, watermark..."
-                      value={negativePrompt}
-                      onChange={(e) => setNegativePrompt(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] text-gray-400 mb-1 block">너비</label>
-                      <input
-                        type="number"
-                        className="input-base w-full"
-                        placeholder="832"
-                        value={resolutionW}
-                        onChange={(e) => setResolutionW(e.target.value ? parseInt(e.target.value) : "")}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-gray-400 mb-1 block">높이</label>
-                      <input
-                        type="number"
-                        className="input-base w-full"
-                        placeholder="1216"
-                        value={resolutionH}
-                        onChange={(e) => setResolutionH(e.target.value ? parseInt(e.target.value) : "")}
-                      />
-                    </div>
-                  </div>
-                  <CharacterImageParamsEditor value={imageParams} onChange={setImageParams} />
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      loading={updateMutation.isPending}
-                      disabled={generationBusy}
-                      onClick={() =>
-                        updateMutation.mutate({
-                          description: desc,
-                          negative_prompt: negativePrompt,
-                          resolution_w: resolutionW === "" ? null : resolutionW,
-                          resolution_h: resolutionH === "" ? null : resolutionH,
-                          image_params: JSON.stringify(imageParams),
-                        })
-                      }
-                    >
-                      설정 저장
-                    </Button>
-                  </div>
+          <span className="text-[11px] text-gray-500">{desc.trim() ? "준비됨" : "설명 필요"}</span>
+        </div>
+        <textarea
+          className="input-base w-full resize-none h-20"
+          placeholder="1girl, brown hair, bob cut, 30s, gentle expression, anime style..."
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+        />
+        <div className="border-t border-white/10 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowSpriteAdvanced((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-accent transition-colors"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+            스프라이트 설정 {showSpriteAdvanced ? "▲" : "▼"}
+          </button>
+          {showSpriteAdvanced && (
+            <div className="mt-3 space-y-3 bg-surface-raised/40 rounded-lg p-3 border border-white/5">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">배경색</label>
+                  <input className="input-base w-full" value={backgroundColor} onChange={(e) => setBackgroundColor(e.target.value)} />
                 </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                loading={generationBusy && task.kind === "image"}
-                disabled={!desc.trim() || generationBusy}
-                onClick={startImageGeneration}
-              >
-                <Wand2 className="w-3 h-3" />
-                {character.image_path ? "다시 생성" : "AI 생성"}
-              </Button>
-              <Button size="sm" disabled={generationBusy} onClick={() => imageInputRef.current?.click()}>
-                <Upload className="w-3 h-3" />
-                업로드
-              </Button>
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadImageMutation.mutate(file);
-                }}
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">Aesthetics</label>
+                  <input className="input-base w-full" value={aesthetics} onChange={(e) => setAesthetics(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">성별</label>
+                  <input className="input-base w-full" value={sex} onChange={(e) => setSex(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">나이</label>
+                  <input type="number" className="input-base w-full" value={age} onChange={(e) => setAge(e.target.value ? parseInt(e.target.value) : "")} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">종족</label>
+                  <input className="input-base w-full" value={race} onChange={(e) => setRace(e.target.value)} />
+                </div>
+                <label className="flex items-center gap-2 text-[11px] text-gray-300 mt-5">
+                  <input type="checkbox" checked={nsfw} onChange={(e) => setNsfw(e.target.checked)} />
+                  NSFW
+                </label>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">Eyes</label>
+                  <input className="input-base w-full" value={eyes} onChange={(e) => setEyes(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">Hair</label>
+                  <input className="input-base w-full" value={hair} onChange={(e) => setHair(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">Face</label>
+                  <input className="input-base w-full" value={face} onChange={(e) => setFace(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">Body</label>
+                  <input className="input-base w-full" value={body} onChange={(e) => setBody(e.target.value)} />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[11px] text-gray-400 mb-1 block">Skin Color</label>
+                  <input className="input-base w-full" value={skinColor} onChange={(e) => setSkinColor(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] text-gray-400 mb-1 block">LoRA Prompt</label>
+                <textarea
+                  className="input-base w-full resize-none h-14"
+                  placeholder="bad quality,worst quality,..."
+                  value={loraPrompt}
+                  onChange={(e) => setLoraPrompt(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-gray-400 mb-1 block">Negative Prompt</label>
+                <textarea
+                  className="input-base w-full resize-none h-14"
+                  placeholder="worst quality, low quality, blurry, text, watermark..."
+                  value={negativePrompt}
+                  onChange={(e) => setNegativePrompt(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">너비</label>
+                  <input
+                    type="number"
+                    className="input-base w-full"
+                    placeholder="832"
+                    value={resolutionW}
+                    onChange={(e) => setResolutionW(e.target.value ? parseInt(e.target.value) : "")}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 mb-1 block">높이</label>
+                  <input
+                    type="number"
+                    className="input-base w-full"
+                    placeholder="1216"
+                    value={resolutionH}
+                    onChange={(e) => setResolutionH(e.target.value ? parseInt(e.target.value) : "")}
+                  />
+                </div>
+              </div>
+              <CharacterImageParamsEditor
+                title="스프라이트 생성 파라미터"
+                workflow="sdxl"
+                value={spriteParams}
+                onChange={setSpriteParams}
               />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={updateMutation.isPending}
+                  disabled={generationBusy}
+                  onClick={() =>
+                    updateMutation.mutate({
+                      description: desc,
+                      background_color: backgroundColor,
+                      aesthetics,
+                      nsfw,
+                      sex,
+                      age: age === "" ? null : age,
+                      race,
+                      eyes,
+                      hair,
+                      face,
+                      body,
+                      skin_color: skinColor,
+                      lora_prompt: loraPrompt,
+                      negative_prompt: negativePrompt,
+                      resolution_w: resolutionW === "" ? null : resolutionW,
+                      resolution_h: resolutionH === "" ? null : resolutionH,
+                      image_params: JSON.stringify(imageParams),
+                      sprite_params: JSON.stringify(spriteParams),
+                    })
+                  }
+                >
+                  설정 저장
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Phase 4: VNCCS 시트 / 스프라이트 섹션 */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs text-gray-400 font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <Layers className="w-3 h-3" />
-            캐릭터 시트 / 스프라이트 (VNCCS)
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-surface-overlay/30 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">1. 캐릭터 스프라이트</p>
+              <p className="text-sm text-gray-300">처음부터 만들거나 업로드 참조 이미지로 복제합니다.</p>
+            </div>
+            <span className={`text-[11px] ${hasSprite ? "text-emerald-300" : "text-gray-500"}`}>
+              {hasSprite ? "완료" : "대기"}
+            </span>
+          </div>
+          <div className="aspect-[3/2] bg-surface-overlay rounded-lg overflow-hidden flex items-center justify-center border border-white/5">
+            {hasSprite ? (
+              <button
+                type="button"
+                className="w-full h-full"
+                onClick={() => setPreviewPath(character.sprite_path)}
+                title="확대 보기"
+              >
+                <img src={assetUrl(character.sprite_path, assetVersion)} className="w-full h-full object-contain" />
+              </button>
+            ) : (
+              <User className="w-8 h-8 text-gray-600" />
+            )}
+          </div>
+          <div className="rounded-lg border border-white/5 bg-black/10 p-2 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] text-gray-400 font-semibold">참조 이미지</p>
+                <p className="text-[10px] text-gray-500 truncate">
+                  {hasReferenceImage ? "업로드됨: Step1.1 복제 생성에 사용" : "선택 사항: 기존 캐릭터 이미지가 있을 때 사용"}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={generationBusy || uploadReferenceImageMutation.isPending}
+                loading={uploadReferenceImageMutation.isPending}
+                onClick={() => referenceImageInputRef.current?.click()}
+              >
+                <Upload className="w-3 h-3" />
+                참조 업로드
+              </Button>
+              <input
+                ref={referenceImageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadReferenceImageMutation.mutate(file);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+            {hasReferenceImage && (
+              <button
+                type="button"
+                className="w-full overflow-hidden rounded-md border border-white/5 bg-surface-overlay"
+                onClick={() => setPreviewPath(character.image_path)}
+                title="참조 이미지 확대 보기"
+              >
+                <img src={assetUrl(character.image_path, assetVersion)} className="max-h-24 w-full object-contain" />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              className="w-full"
+              loading={generationBusy && task.kind === "sprite"}
+              disabled={spriteBlocked || generationBusy}
+              onClick={() => startSpriteGeneration("new")}
+            >
+              <Wand2 className="w-3 h-3" />
+              {hasSprite ? "처음부터 스프라이트 재생성" : "처음부터 스프라이트 생성"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="w-full"
+              loading={generationBusy && task.kind === "sprite"}
+              disabled={spriteBlocked || generationBusy || !hasReferenceImage}
+              onClick={() => startSpriteGeneration("reference")}
+            >
+              <Wand2 className="w-3 h-3" />
+              참조 이미지로 스프라이트 생성
+            </Button>
+          </div>
+          <p className="text-[11px] text-gray-500">
+            {spriteBlocked
+              ? "설명 프롬프트를 먼저 입력하세요."
+              : "생성된 스프라이트가 장면샷과 영상 프레임의 캐릭터 일관성 레퍼런스가 됩니다."}
           </p>
-          <a
-            href="/workflows?workflow=vnccs_step1_sheet_ui"
-            target="_blank"
-            className="text-[10px] text-accent hover:underline"
-          >
-            전체 VNCCS 파이프라인 →
-          </a>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {/* 시트 */}
-          <div className="bg-surface-overlay/40 rounded-xl p-2 border border-white/10">
-            <div className="aspect-[3/2] bg-surface-overlay rounded-lg overflow-hidden flex items-center justify-center mb-2">
-              {character.sheet_path ? (
-                <img src={`/${character.sheet_path}`} className="w-full h-full object-contain" />
-              ) : (
-                <ImageIcon className="w-6 h-6 text-gray-600" />
-              )}
-            </div>
-            <p className="text-[10px] text-gray-500 mb-1.5">턴어라운드 시트</p>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="primary"
-                className="flex-1 text-[11px]"
-                loading={generationBusy && task.kind === "sheet"}
-                disabled={!desc.trim() || generationBusy}
-                onClick={startSheetGeneration}
-              >
-                <Wand2 className="w-3 h-3" />
-                {character.sheet_path ? "재생성" : "AI"}
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1 text-[11px]"
-                disabled={generationBusy}
-                onClick={() => sheetInputRef.current?.click()}
-              >
-                <Upload className="w-3 h-3" />
-                업로드
-              </Button>
-              <input
-                ref={sheetInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadSheetMutation.mutate(file);
-                }}
-              />
-            </div>
-          </div>
 
-          {/* 스프라이트 */}
-          <div className="bg-surface-overlay/40 rounded-xl p-2 border border-white/10">
-            <div className="aspect-[3/2] bg-[linear-gradient(45deg,#1a1a1a_25%,transparent_25%),linear-gradient(-45deg,#1a1a1a_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1a1a1a_75%),linear-gradient(-45deg,transparent_75%,#1a1a1a_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0] rounded-lg overflow-hidden flex items-center justify-center mb-2">
-              {character.sprite_path ? (
-                <img src={`/${character.sprite_path}`} className="w-full h-full object-contain" />
-              ) : (
-                <User className="w-6 h-6 text-gray-600" />
-              )}
+        <div className="rounded-xl border border-white/10 bg-surface-overlay/30 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">2. 캐릭터 키비주얼</p>
+              <p className="text-sm text-gray-300">선택 사항입니다. 실제 영상 장면샷은 씬 탭에서 생성합니다.</p>
             </div>
-            <p className="text-[10px] text-gray-500 mb-1.5">투명배경 스프라이트 (VN_Step4)</p>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                className="w-full text-[11px]"
-                disabled={generationBusy}
-                onClick={() => spriteInputRef.current?.click()}
-              >
-                <Upload className="w-3 h-3" />
-                업로드
-              </Button>
-              <input
-                ref={spriteInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadSpriteMutation.mutate(file);
-                }}
-              />
-            </div>
+            <span className={`text-[11px] ${hasImage ? "text-emerald-300" : "text-gray-500"}`}>
+              {hasImage ? "완료" : "대기"}
+            </span>
           </div>
+          <div className="aspect-square bg-surface-overlay rounded-lg overflow-hidden flex items-center justify-center border border-white/5">
+            {hasImage ? (
+              <button
+                type="button"
+                className="w-full h-full"
+                onClick={() => setPreviewPath(character.image_path)}
+                title="확대 보기"
+              >
+                <img src={assetUrl(character.image_path, assetVersion)} className="w-full h-full object-cover" />
+              </button>
+            ) : (
+              <ImageIcon className="w-8 h-8 text-gray-600" />
+            )}
+          </div>
+          <div className="border-t border-white/10 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowImageAdvanced((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-accent transition-colors"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              이미지 설정 {showImageAdvanced ? "▲" : "▼"}
+            </button>
+            {showImageAdvanced && (
+              <div className="mt-3 bg-surface-raised/40 rounded-lg p-3 border border-white/5">
+                <CharacterImageParamsEditor
+                  title="이미지 생성 파라미터"
+                  workflow="qwen_edit"
+                  value={imageParams}
+                  onChange={setImageParams}
+                />
+              </div>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="primary"
+            className="w-full"
+            loading={generationBusy && task.kind === "image"}
+            disabled={imageBlocked || generationBusy}
+            onClick={startImageGeneration}
+          >
+            <Wand2 className="w-3 h-3" />
+            {hasImage ? "키비주얼 재생성" : "키비주얼 생성"}
+          </Button>
+          <p className="text-[11px] text-gray-500">
+            {imageBlocked ? "먼저 스프라이트를 준비하세요." : "장면샷은 여기서 업로드하지 않고, 씬 프롬프트와 스프라이트 레퍼런스로 생성합니다."}
+          </p>
         </div>
-        <p className="text-[10px] text-gray-600 mt-2">
-          씬 이미지 생성 시 우선순위: 스프라이트 &gt; 시트 &gt; 기본 이미지
-        </p>
       </div>
 
       {/* 목소리 섹션 */}
@@ -604,7 +754,7 @@ function CharacterEditor({
             <Mic className="w-3.5 h-3.5" />
             보이스 샘플 준비됨
             <audio
-              src={`/${character.voice_sample_path}`}
+              src={assetUrl(character.voice_sample_path, assetVersion)}
               controls
               className="ml-auto h-7 max-w-60"
             />
@@ -689,7 +839,7 @@ function CharacterEditor({
             }
           >
             <Wand2 className="w-3 h-3" />
-            {character.voice_sample_path ? "보이스 재생성" : "Voice Design으로 생성"}
+            {character.voice_sample_path ? "보이스 샘플 재생성" : "Voice Design 샘플 생성"}
           </Button>
           <Button size="sm" disabled={generationBusy} onClick={() => voiceInputRef.current?.click()}>
             <Upload className="w-3 h-3" />
@@ -717,9 +867,12 @@ function CharacterEditor({
             <option value="s2pro">Fish S2 Pro</option>
           </select>
         </div>
+        <p className="mt-2 text-[11px] text-gray-500">
+          Voice Design 샘플 생성은 Qwen3 VoiceDesign 워크플로우를 사용합니다. Fish S2 Pro는 이 샘플/업로드 WAV를 레퍼런스로 받아 Voice Clone TTS를 수행합니다.
+        </p>
       </div>
 
-      {(character.image_path || character.sheet_path || character.voice_sample_path) && (
+      {(character.image_path || character.sprite_path || character.voice_sample_path) && (
         <div className="space-y-3 border-t border-white/10 pt-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
@@ -730,7 +883,7 @@ function CharacterEditor({
             </span>
           </div>
 
-          {character.image_path && (
+          {hasImage && (
             <div className="flex items-start gap-2">
               <Button
                 size="sm"
@@ -739,33 +892,35 @@ function CharacterEditor({
                 disabled={!desc.trim() || generationBusy}
                 onClick={startImageGeneration}
               >
-                🖼️ 이미지 재생성
+                🖼️ 키비주얼 재생성
               </Button>
               <div className="flex-1 min-w-0">
                 <img
-                  src={`/${character.image_path}`}
+                  src={assetUrl(character.image_path, assetVersion)}
                   className="w-16 h-16 rounded-lg object-cover border border-white/10"
                 />
               </div>
             </div>
           )}
 
-          {character.sheet_path && (
+          {character.sprite_path && (
             <div className="flex items-start gap-2">
               <Button
                 size="sm"
                 variant="secondary"
-                loading={generationBusy && task.kind === "sheet"}
+                loading={generationBusy && task.kind === "sprite"}
                 disabled={!desc.trim() || generationBusy}
-                onClick={startSheetGeneration}
+                onClick={() => startSpriteGeneration("new")}
               >
-                📚 시트 재생성
+                처음부터 스프라이트 재생성
               </Button>
               <div className="flex-1 min-w-0">
-                <img
-                  src={`/${character.sheet_path}`}
-                  className="w-20 h-12 rounded-lg object-contain bg-surface-overlay border border-white/10"
-                />
+                <button type="button" onClick={() => setPreviewPath(character.sprite_path)}>
+                  <img
+                    src={assetUrl(character.sprite_path, assetVersion)}
+                    className="w-20 h-12 rounded-lg object-contain bg-surface-overlay border border-white/10"
+                  />
+                </button>
               </div>
             </div>
           )}
@@ -791,7 +946,7 @@ function CharacterEditor({
               </Button>
               <div className="flex-1 min-w-0">
                 <audio
-                  src={`/${character.voice_sample_path}`}
+                  src={assetUrl(character.voice_sample_path, assetVersion)}
                   controls
                   className="w-full h-8"
                 />
@@ -853,14 +1008,39 @@ function CharacterEditor({
           )}
         </div>
       )}
+
+      {previewPath && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 p-6 flex items-center justify-center"
+          onClick={() => setPreviewPath(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+            onClick={() => setPreviewPath(null)}
+            title="닫기"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={assetUrl(previewPath, assetVersion)}
+            className="max-w-full max-h-full object-contain rounded-lg border border-white/20"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 function CharacterImageParamsEditor({
+  title = "이미지 파라미터",
+  workflow = "sdxl",
   value,
   onChange,
 }: {
+  title?: string;
+  workflow?: "sdxl" | "qwen_edit";
   value: ImageParams;
   onChange: (p: ImageParams) => void;
 }) {
@@ -876,9 +1056,9 @@ function CharacterImageParamsEditor({
 
   return (
     <div className="border-t border-white/5 pt-2">
-      <div className="text-[11px] text-gray-400 mb-2 font-semibold">🖼️ 이미지 파라미터</div>
+      <div className="text-[11px] text-gray-400 mb-2 font-semibold">{title}</div>
       <ImageModelPicker
-        workflow="sdxl"
+        workflow={workflow}
         value={value.model ?? ""}
         onChange={(model) => set("model", model || undefined)}
       />
@@ -918,29 +1098,24 @@ function CharacterImageParamsEditor({
           <label className="text-[10px] text-gray-500">sampler</label>
           <select
             className="input-base w-full"
-            value={value.sampler ?? ""}
-            onChange={(e) => set("sampler", e.target.value || undefined)}
+            value={value.sampler ?? DEFAULT_IMAGE_SAMPLER}
+            onChange={(e) => set("sampler", e.target.value)}
           >
-            <option value="">기본</option>
-            <option value="euler">euler</option>
-            <option value="euler_ancestral">euler_ancestral</option>
-            <option value="dpmpp_2m">dpmpp_2m</option>
-            <option value="dpmpp_2m_sde">dpmpp_2m_sde</option>
-            <option value="unipc">unipc</option>
+            {SAMPLER_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
           </select>
         </div>
         <div>
           <label className="text-[10px] text-gray-500">scheduler</label>
           <select
             className="input-base w-full"
-            value={value.scheduler ?? ""}
-            onChange={(e) => set("scheduler", e.target.value || undefined)}
+            value={value.scheduler ?? DEFAULT_IMAGE_SCHEDULER}
+            onChange={(e) => set("scheduler", e.target.value)}
           >
-            <option value="">기본</option>
-            <option value="sgm_uniform">sgm_uniform</option>
-            <option value="simple">simple</option>
-            <option value="karras">karras</option>
-            <option value="normal">normal</option>
+            {IMAGE_SCHEDULER_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
           </select>
         </div>
         <div>
@@ -973,6 +1148,34 @@ function CharacterImageParamsEditor({
           <span>Hand Detailer</span>
         </label>
       </div>
+      {workflow === "qwen_edit" && (
+        <div className="mt-3 rounded-lg border border-white/5 bg-black/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-2 font-semibold">Qwen Image Edit 레퍼런스 브랜치</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <NumberParam label="Lightning LoRA" placeholder="1.0" step="0.05" value={value.qwen_lightning_strength} onChange={(v) => set("qwen_lightning_strength", v)} />
+            <NumberParam label="Pose LoRA" placeholder="1.0" step="0.05" value={value.qwen_pose_strength} onChange={(v) => set("qwen_pose_strength", v)} />
+            <NumberParam label="Clothes LoRA" placeholder="0.8" step="0.05" value={value.qwen_clothes_strength} onChange={(v) => set("qwen_clothes_strength", v)} />
+            <NumberParam label="layers" placeholder="3" value={value.qwen_layers} onChange={(v) => set("qwen_layers", v)} />
+            <NumberParam label="start_at_step" placeholder="0" value={value.qwen_start_at_step} onChange={(v) => set("qwen_start_at_step", v)} />
+            <NumberParam label="end_at_step" placeholder="10000" value={value.qwen_end_at_step} onChange={(v) => set("qwen_end_at_step", v)} />
+          </div>
+        </div>
+      )}
+      <div className="mt-3 rounded-lg border border-white/5 bg-black/10 p-2">
+        <div className="text-[10px] text-gray-500 mb-2 font-semibold">Face/Hand Detailer 세부값</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <NumberParam label="detailer_steps" placeholder="10" value={value.detailer_steps} onChange={(v) => set("detailer_steps", v)} />
+          <NumberParam label="detailer_cfg" placeholder="4.5" step="0.1" value={value.detailer_cfg} onChange={(v) => set("detailer_cfg", v)} />
+          <NumberParam label="detailer_denoise" placeholder="0.25" step="0.05" value={value.detailer_denoise} onChange={(v) => set("detailer_denoise", v)} />
+          <NumberParam label="guide_size" placeholder="512" value={value.detailer_guide_size} onChange={(v) => set("detailer_guide_size", v)} />
+          <NumberParam label="max_size" placeholder="1536" value={value.detailer_max_size} onChange={(v) => set("detailer_max_size", v)} />
+          <NumberParam label="bbox_threshold" placeholder="0.5" step="0.05" value={value.bbox_threshold} onChange={(v) => set("bbox_threshold", v)} />
+          <NumberParam label="bbox_dilation" placeholder="10" value={value.bbox_dilation} onChange={(v) => set("bbox_dilation", v)} />
+          <NumberParam label="crop_factor" placeholder="3.0" step="0.1" value={value.bbox_crop_factor} onChange={(v) => set("bbox_crop_factor", v)} />
+          <NumberParam label="sam_threshold" placeholder="0.7" step="0.01" value={value.sam_threshold} onChange={(v) => set("sam_threshold", v)} />
+          <NumberParam label="mask_feather" placeholder="20" value={value.noise_mask_feather} onChange={(v) => set("noise_mask_feather", v)} />
+        </div>
+      </div>
       <div className="mt-3">
         <CharacterLoraPicker
           value={(value.loras as LoraSelection[]) ?? []}
@@ -988,43 +1191,30 @@ function CharacterImageParamsEditor({
   );
 }
 
-function ImageModelPicker({
-  workflow,
+function NumberParam({
+  label,
+  placeholder,
   value,
+  step,
   onChange,
 }: {
-  workflow: "sdxl" | "qwen_edit" | "vnccs_sheet";
-  value: string;
-  onChange: (v: string) => void;
+  label: string;
+  placeholder: string;
+  value?: number;
+  step?: string;
+  onChange: (v: number | undefined) => void;
 }) {
-  const { data } = useQuery({
-    queryKey: ["image-models"],
-    queryFn: () => api.imageModels.list(),
-    staleTime: 60_000,
-  });
-
-  const models =
-    workflow === "qwen_edit" ? (data?.qwen_edit ?? []) : (data?.checkpoints ?? []);
-
-  if (models.length === 0) return null;
-
   return (
-    <div className="mb-3">
-      <label className="text-xs text-gray-400 mb-1 block">
-        이미지 모델 {workflow === "qwen_edit" ? "(Qwen Edit UNet)" : "(Checkpoint)"}
-      </label>
-      <select
+    <div>
+      <label className="text-[10px] text-gray-500">{label}</label>
+      <input
+        type="number"
+        step={step}
         className="input-base w-full"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">원본 워크플로우 기본값 사용</option>
-        {models.map((m) => (
-          <option key={m.name} value={m.name}>
-            {m.filename} ({m.size_gb} GB)
-          </option>
-        ))}
-      </select>
+        placeholder={placeholder}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
+      />
     </div>
   );
 }

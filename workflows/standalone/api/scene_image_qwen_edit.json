@@ -1,0 +1,864 @@
+{
+  "7": {
+    "class_type": "LoRA Stacker",
+    "inputs": {
+      "input_mode": "simple",
+      "lora_count": 0,
+      "lora_name_1": "None",
+      "lora_wt_1": 1.0,
+      "model_str_1": 1.0,
+      "clip_str_1": 1.0,
+      "lora_name_2": "None",
+      "lora_wt_2": 1.0,
+      "model_str_2": 1.0,
+      "clip_str_2": 1.0,
+      "lora_name_3": "None",
+      "lora_wt_3": 1.0,
+      "model_str_3": 1.0,
+      "clip_str_3": 1.0,
+      "lora_name_4": "None",
+      "lora_wt_4": 1.0,
+      "model_str_4": 1.0,
+      "clip_str_4": 1.0,
+      "lora_name_5": "None",
+      "lora_wt_5": 1.0,
+      "model_str_5": 1.0,
+      "clip_str_5": 1.0,
+      "lora_name_6": "None",
+      "lora_wt_6": 1.0,
+      "model_str_6": 1.0,
+      "clip_str_6": 1.0,
+      "lora_name_7": "None",
+      "lora_wt_7": 1.0,
+      "model_str_7": 1.0,
+      "clip_str_7": 1.0,
+      "lora_name_8": "None",
+      "lora_wt_8": 1.0,
+      "model_str_8": 1.0,
+      "clip_str_8": 1.0,
+      "lora_name_9": "None",
+      "lora_wt_9": 1.0,
+      "model_str_9": 1.0,
+      "clip_str_9": 1.0,
+      "lora_name_10": "None",
+      "lora_wt_10": 1.0,
+      "model_str_10": 1.0,
+      "clip_str_10": 1.0,
+      "lora_name_11": "None",
+      "lora_wt_11": 1.0,
+      "model_str_11": 1.0,
+      "clip_str_11": 1.0,
+      "lora_name_12": "None",
+      "lora_wt_12": 1.0,
+      "model_str_12": 1.0,
+      "clip_str_12": 1.0,
+      "lora_name_13": "None",
+      "lora_wt_13": 1.0,
+      "model_str_13": 1.0,
+      "clip_str_13": 1.0,
+      "lora_name_14": "None",
+      "lora_wt_14": 1.0,
+      "model_str_14": 1.0,
+      "clip_str_14": 1.0,
+      "lora_name_15": "None",
+      "lora_wt_15": 1.0,
+      "model_str_15": 1.0,
+      "clip_str_15": 1.0,
+      "lora_name_16": "None",
+      "lora_wt_16": 1.0,
+      "model_str_16": 1.0,
+      "clip_str_16": 1.0,
+      "lora_name_17": "None",
+      "lora_wt_17": 1.0,
+      "model_str_17": 1.0,
+      "clip_str_17": 1.0,
+      "lora_name_18": "None",
+      "lora_wt_18": 1.0,
+      "model_str_18": 1.0,
+      "clip_str_18": 1.0,
+      "lora_name_19": "None",
+      "lora_wt_19": 1.0,
+      "model_str_19": 1.0,
+      "clip_str_19": 1.0,
+      "lora_name_20": "None",
+      "lora_wt_20": 1.0,
+      "model_str_20": 1.0,
+      "clip_str_20": 1.0,
+      "lora_name_21": "None",
+      "lora_wt_21": 1.0,
+      "model_str_21": 1.0,
+      "clip_str_21": 1.0,
+      "lora_name_22": "None",
+      "lora_wt_22": 1.0,
+      "model_str_22": 1.0,
+      "clip_str_22": 1.0,
+      "lora_name_23": "None",
+      "lora_wt_23": 1.0,
+      "model_str_23": 1.0,
+      "clip_str_23": 1.0,
+      "lora_name_24": "None",
+      "lora_wt_24": 1.0,
+      "model_str_24": 1.0,
+      "clip_str_24": 1.0,
+      "lora_name_25": "None",
+      "lora_wt_25": 1.0,
+      "model_str_25": 1.0,
+      "clip_str_25": 1.0,
+      "lora_name_26": "None",
+      "lora_wt_26": 1.0,
+      "model_str_26": 1.0,
+      "clip_str_26": 1.0,
+      "lora_name_27": "None",
+      "lora_wt_27": 1.0,
+      "model_str_27": 1.0,
+      "clip_str_27": 1.0,
+      "lora_name_28": "None",
+      "lora_wt_28": 1.0,
+      "model_str_28": 1.0,
+      "clip_str_28": 1.0,
+      "lora_name_29": "None",
+      "lora_wt_29": 1.0,
+      "model_str_29": 1.0,
+      "clip_str_29": 1.0,
+      "lora_name_30": "None",
+      "lora_wt_30": 1.0,
+      "model_str_30": 1.0,
+      "clip_str_30": 1.0,
+      "lora_name_31": "None",
+      "lora_wt_31": 1.0,
+      "model_str_31": 1.0,
+      "clip_str_31": 1.0,
+      "lora_name_32": "None",
+      "lora_wt_32": 1.0,
+      "model_str_32": 1.0,
+      "clip_str_32": 1.0,
+      "lora_name_33": "None",
+      "lora_wt_33": 1.0,
+      "model_str_33": 1.0,
+      "clip_str_33": 1.0,
+      "lora_name_34": "None",
+      "lora_wt_34": 1.0,
+      "model_str_34": 1.0,
+      "clip_str_34": 1.0,
+      "lora_name_35": "None",
+      "lora_wt_35": 1.0,
+      "model_str_35": 1.0,
+      "clip_str_35": 1.0,
+      "lora_name_36": "None",
+      "lora_wt_36": 1.0,
+      "model_str_36": 1.0,
+      "clip_str_36": 1.0,
+      "lora_name_37": "None",
+      "lora_wt_37": 1.0,
+      "model_str_37": 1.0,
+      "clip_str_37": 1.0,
+      "lora_name_38": "None",
+      "lora_wt_38": 1.0,
+      "model_str_38": 1.0,
+      "clip_str_38": 1.0,
+      "lora_name_39": "None",
+      "lora_wt_39": 1.0,
+      "model_str_39": 1.0,
+      "clip_str_39": 1.0,
+      "lora_name_40": "None",
+      "lora_wt_40": 1.0,
+      "model_str_40": 1.0,
+      "clip_str_40": 1.0,
+      "lora_name_41": "None",
+      "lora_wt_41": 1.0,
+      "model_str_41": 1.0,
+      "clip_str_41": 1.0,
+      "lora_name_42": "None",
+      "lora_wt_42": 1.0,
+      "model_str_42": 1.0,
+      "clip_str_42": 1.0,
+      "lora_name_43": "None",
+      "lora_wt_43": 1.0,
+      "model_str_43": 1.0,
+      "clip_str_43": 1.0,
+      "lora_name_44": "None",
+      "lora_wt_44": 1.0,
+      "model_str_44": 1.0,
+      "clip_str_44": 1.0,
+      "lora_name_45": "None",
+      "lora_wt_45": 1.0,
+      "model_str_45": 1.0,
+      "clip_str_45": 1.0,
+      "lora_name_46": "None",
+      "lora_wt_46": 1.0,
+      "model_str_46": 1.0,
+      "clip_str_46": 1.0,
+      "lora_name_47": "None",
+      "lora_wt_47": 1.0,
+      "model_str_47": 1.0,
+      "clip_str_47": 1.0,
+      "lora_name_48": "None",
+      "lora_wt_48": 1.0,
+      "model_str_48": 1.0,
+      "clip_str_48": 1.0,
+      "lora_name_49": "None",
+      "lora_wt_49": 1.0,
+      "model_str_49": 1.0,
+      "clip_str_49": 1.0,
+      "lora_name_50": "None",
+      "lora_wt_50": 1.0,
+      "model_str_50": 1.0,
+      "clip_str_50": 1.0
+    },
+    "_meta": {
+      "title": "LoRA Stacker"
+    }
+  },
+  "9": {
+    "class_type": "StringFunction|pysssss",
+    "inputs": {
+      "action": "append",
+      "tidy_tags": "yes",
+      "text_a": "cinematic bedroom conversation, two characters sitting close together, warm practical lighting, controlled composition, expressive faces. Use the last reference image only as continuity guidance for outfit, color palette, lighting, and scene styling. Do not introduce it as a new character.",
+      "text_b": "",
+      "text_c": ""
+    },
+    "_meta": {
+      "title": "String Function - 프롬프트 입력칸"
+    }
+  },
+  "8": {
+    "class_type": "Simple Text 💬ED",
+    "inputs": {
+      "text": [
+        "9",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Simple Text 💬ED"
+    }
+  },
+  "10": {
+    "class_type": "Simple Text 💬ED",
+    "inputs": {
+      "text": "low quality, watermark, different character, bad anatomy"
+    },
+    "_meta": {
+      "title": "부정값 노드 💬ED"
+    }
+  },
+  "6": {
+    "class_type": "Efficient Loader 💬ED",
+    "inputs": {
+      "lora_stack": [
+        "7",
+        0
+      ],
+      "positive": [
+        "8",
+        0
+      ],
+      "negative": [
+        "10",
+        0
+      ],
+      "ckpt_name": "Illustrious/ILFlatMix.safetensors",
+      "vae_name": "Baked VAE",
+      "clip_skip": -2,
+      "paint_mode": "✍️ Txt2Img",
+      "batch_size": 1,
+      "seed": 0,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "sgm_uniform",
+      "image_width": 832,
+      "image_height": 1216
+    },
+    "_meta": {
+      "title": "Efficient Loader 💬ED"
+    }
+  },
+  "5": {
+    "class_type": "KSampler (Efficient) 💬ED",
+    "inputs": {
+      "context": [
+        "6",
+        0
+      ],
+      "set_seed_cfg_sampler": "from node only",
+      "seed": 0,
+      "steps": 30,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "sgm_uniform",
+      "denoise": 1.0
+    },
+    "_meta": {
+      "title": "KSampler (Efficient) 💬ED"
+    }
+  },
+  "11": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "animagineXLV31_v31.safetensors"
+    },
+    "_meta": {
+      "title": "CheckpointLoaderSimple"
+    }
+  },
+  "12": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "segm/person_yolov8m-seg.pt"
+    },
+    "_meta": {
+      "title": "UltralyticsDetectorProvider"
+    }
+  },
+  "13": {
+    "class_type": "SAMLoader",
+    "inputs": {
+      "model_name": "sam_vit_b_01ec64.pth",
+      "device_mode": "AUTO"
+    },
+    "_meta": {
+      "title": "SAMLoader"
+    }
+  },
+  "4": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "35",
+        0
+      ],
+      "model": [
+        "6",
+        1
+      ],
+      "clip": [
+        "6",
+        6
+      ],
+      "vae": [
+        "11",
+        2
+      ],
+      "positive": [
+        "6",
+        2
+      ],
+      "negative": [
+        "6",
+        2
+      ],
+      "bbox_detector": [
+        "12",
+        0
+      ],
+      "sam_model_opt": [
+        "13",
+        0
+      ],
+      "segm_detector_opt": [
+        "12",
+        1
+      ],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1536,
+      "seed": 782329699761737,
+      "steps": 10,
+      "cfg": 4.5,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": 0.25000000000000006,
+      "feather": 5,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3,
+      "sam_detection_hint": "center-1",
+      "sam_dilation": 0,
+      "sam_threshold": 0.14,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "False",
+      "drop_size": 10,
+      "wildcard": "",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "tiled_encode": false,
+      "tiled_decode": false
+    },
+    "_meta": {
+      "title": "바디 디테일러"
+    }
+  },
+  "14": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/face_yolov8m.pt"
+    },
+    "_meta": {
+      "title": "UltralyticsDetectorProvider"
+    }
+  },
+  "15": {
+    "class_type": "SAMLoader",
+    "inputs": {
+      "model_name": "sam_vit_b_01ec64.pth",
+      "device_mode": "AUTO"
+    },
+    "_meta": {
+      "title": "SAMLoader"
+    }
+  },
+  "3": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "model": [
+        "6",
+        1
+      ],
+      "clip": [
+        "6",
+        6
+      ],
+      "vae": [
+        "11",
+        2
+      ],
+      "positive": [
+        "6",
+        2
+      ],
+      "negative": [
+        "6",
+        3
+      ],
+      "bbox_detector": [
+        "14",
+        0
+      ],
+      "sam_model_opt": [
+        "15",
+        0
+      ],
+      "segm_detector_opt": [
+        "14",
+        1
+      ],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1536,
+      "seed": 981780450810400,
+      "steps": 10,
+      "cfg": 4.5,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": 0.25000000000000006,
+      "feather": 5,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3,
+      "sam_detection_hint": "center-1",
+      "sam_dilation": 0,
+      "sam_threshold": 0.14,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "False",
+      "drop_size": 10,
+      "wildcard": "",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "tiled_encode": false,
+      "tiled_decode": false
+    },
+    "_meta": {
+      "title": "페이스 디테일러"
+    }
+  },
+  "16": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {
+      "model_name": "bbox/hand_yolov8s.pt"
+    },
+    "_meta": {
+      "title": "UltralyticsDetectorProvider"
+    }
+  },
+  "17": {
+    "class_type": "SAMLoader",
+    "inputs": {
+      "model_name": "sam_vit_b_01ec64.pth",
+      "device_mode": "AUTO"
+    },
+    "_meta": {
+      "title": "SAMLoader"
+    }
+  },
+  "2": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": [
+        "3",
+        0
+      ],
+      "model": [
+        "6",
+        1
+      ],
+      "clip": [
+        "6",
+        6
+      ],
+      "vae": [
+        "11",
+        2
+      ],
+      "positive": [
+        "6",
+        2
+      ],
+      "negative": [
+        "6",
+        3
+      ],
+      "bbox_detector": [
+        "16",
+        0
+      ],
+      "sam_model_opt": [
+        "17",
+        0
+      ],
+      "segm_detector_opt": [
+        "16",
+        1
+      ],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1536,
+      "seed": 785501272669440,
+      "steps": 10,
+      "cfg": 4.5,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": 0.25000000000000006,
+      "feather": 0,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3,
+      "sam_detection_hint": "center-1",
+      "sam_dilation": 0,
+      "sam_threshold": 0,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.69,
+      "sam_mask_hint_use_negative": "False",
+      "drop_size": 10,
+      "wildcard": "",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "tiled_encode": false,
+      "tiled_decode": false
+    },
+    "_meta": {
+      "title": "핸드 디테일러"
+    }
+  },
+  "1": {
+    "class_type": "Image Comparer (rgthree)",
+    "inputs": {
+      "image_a": [
+        "2",
+        0
+      ],
+      "image_b": [
+        "35",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Image Comparer (rgthree) - 최종 결과값"
+    }
+  },
+  "18": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "2",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "Hand Detailer"
+    }
+  },
+  "19": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "3",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "Face Detaile"
+    }
+  },
+  "20": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "4",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "body Detailer"
+    }
+  },
+  "21": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "2",
+        0
+      ],
+      "filename_prefix": "standalone/scene_image_qwen_edit"
+    },
+    "_meta": {
+      "title": "SaveImage"
+    }
+  },
+  "22": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "charref_0.png"
+    },
+    "_meta": {
+      "title": "Qwen 캐릭터 레퍼런스 1"
+    }
+  },
+  "23": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "charref_1.png"
+    },
+    "_meta": {
+      "title": "Qwen 캐릭터 레퍼런스 2"
+    }
+  },
+  "24": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "visualref_0.png"
+    },
+    "_meta": {
+      "title": "Qwen 캐릭터 레퍼런스 3"
+    }
+  },
+  "25": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "Qwen 2.5 VL Text Encoder"
+    }
+  },
+  "26": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "_meta": {
+      "title": "Qwen Image VAE"
+    }
+  },
+  "27": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": {
+      "unet_name": "qwen-image-edit-2511-Q5_0.gguf"
+    },
+    "_meta": {
+      "title": "Qwen Image Edit (GGUF Q5_0)"
+    }
+  },
+  "28": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": [
+        "27",
+        0
+      ],
+      "clip": [
+        "25",
+        0
+      ],
+      "lora_name": "qwen/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1.0,
+      "strength_clip": 1.0
+    },
+    "_meta": {
+      "title": "Lightning 4-step distill LoRA"
+    }
+  },
+  "29": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": [
+        "28",
+        0
+      ],
+      "clip": [
+        "28",
+        1
+      ],
+      "lora_name": "qwen/VNCCS/poser_helper_v2_000004200.safetensors",
+      "strength_model": 1.0,
+      "strength_clip": 1.0
+    },
+    "_meta": {
+      "title": "Pose transfer LoRA"
+    }
+  },
+  "30": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": [
+        "29",
+        0
+      ],
+      "clip": [
+        "29",
+        1
+      ],
+      "lora_name": "qwen/VNCCS/ClothesHelperUltimateV1_000005100.safetensors",
+      "strength_model": 0.8,
+      "strength_clip": 1.0
+    },
+    "_meta": {
+      "title": "Clothes preserve LoRA"
+    }
+  },
+  "31": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "30",
+        1
+      ],
+      "vae": [
+        "26",
+        0
+      ],
+      "prompt": "cinematic bedroom conversation, two characters sitting close together, warm practical lighting, controlled composition, expressive faces. Use the last reference image only as continuity guidance for outfit, color palette, lighting, and scene styling. Do not introduce it as a new character.",
+      "image1": [
+        "22",
+        0
+      ],
+      "image2": [
+        "23",
+        0
+      ],
+      "image3": [
+        "24",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Qwen Positive (참조 일관성)"
+    }
+  },
+  "32": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "30",
+        1
+      ],
+      "vae": [
+        "26",
+        0
+      ],
+      "prompt": "low quality, watermark, different character, bad anatomy"
+    },
+    "_meta": {
+      "title": "Qwen Negative"
+    }
+  },
+  "33": {
+    "class_type": "EmptyQwenImageLayeredLatentImage",
+    "inputs": {
+      "width": 832,
+      "height": 1216,
+      "layers": 4,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Qwen 레퍼런스 latent"
+    }
+  },
+  "34": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "30",
+        0
+      ],
+      "positive": [
+        "31",
+        0
+      ],
+      "negative": [
+        "32",
+        0
+      ],
+      "latent_image": [
+        "33",
+        0
+      ],
+      "add_noise": "enable",
+      "noise_seed": 0,
+      "control_after_generate": "randomize",
+      "steps": 4,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable"
+    },
+    "_meta": {
+      "title": "Qwen KSampler"
+    }
+  },
+  "35": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "34",
+        0
+      ],
+      "vae": [
+        "26",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Qwen VAE Decode"
+    }
+  }
+}

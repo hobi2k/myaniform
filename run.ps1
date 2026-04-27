@@ -37,6 +37,7 @@ Write-Host "[1/2] ComfyUI (:8188) 기동 — normalvram + cache-none + smart-mem
 $comfyArgs = @(
     "ComfyUI\main.py",
     "--port", "8188",
+    "--listen", "0.0.0.0",
     "--normalvram",
     "--cache-none",
     "--disable-smart-memory",
@@ -51,7 +52,7 @@ Write-Host "  PID=$($comfyProc.Id)  로그: logs\comfyui.log"
 
 # 백엔드 기동
 Write-Host "[2/2] FastAPI 백엔드 (:8000) 기동"
-$backendArgs = @("-m", "uvicorn", "backend.main:app", "--port", "8000")
+$backendArgs = @("-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000")
 $backendProc = Start-Process -FilePath "python" `
     -ArgumentList $backendArgs `
     -RedirectStandardOutput "logs\backend.log" `

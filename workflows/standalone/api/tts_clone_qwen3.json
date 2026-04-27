@@ -1,0 +1,92 @@
+{
+  "1": {
+    "_meta": {
+      "title": "Qwen3-TTS Base (clone prompt encoder)"
+    },
+    "class_type": "Qwen3Loader",
+    "inputs": {
+      "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+      "source": "HuggingFace",
+      "precision": "bf16",
+      "attention": "sdpa",
+      "local_model_path": ""
+    }
+  },
+  "2": {
+    "_meta": {
+      "title": "레퍼런스 보이스 로드"
+    },
+    "class_type": "LoadAudio",
+    "inputs": {
+      "audio": "voicesample.wav"
+    }
+  },
+  "3": {
+    "_meta": {
+      "title": "Voice clone prompt 생성 (x-vector)"
+    },
+    "class_type": "Qwen3ClonePromptFromAudio",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "ref_audio": [
+        "2",
+        0
+      ],
+      "ref_text": "",
+      "ref_audio_max_seconds": 30.0,
+      "x_vector_only_mode": true
+    }
+  },
+  "4": {
+    "_meta": {
+      "title": "Qwen3-TTS CustomVoice (prompt renderer)"
+    },
+    "class_type": "Qwen3Loader",
+    "inputs": {
+      "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "source": "HuggingFace",
+      "precision": "bf16",
+      "attention": "sdpa",
+      "local_model_path": ""
+    }
+  },
+  "5": {
+    "_meta": {
+      "title": "Voice Clone 합성"
+    },
+    "class_type": "Qwen3CustomVoiceFromPrompt",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "prompt": [
+        "3",
+        0
+      ],
+      "text": "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
+      "seed": 42,
+      "language": "Korean",
+      "instruct": "",
+      "top_p": 1.0,
+      "temperature": 0.9,
+      "max_new_tokens": 2048
+    }
+  },
+  "6": {
+    "_meta": {
+      "title": "음성 저장"
+    },
+    "class_type": "SaveAudio",
+    "inputs": {
+      "audio": [
+        "5",
+        0
+      ],
+      "filename_prefix": "standalone/tts_clone_qwen3"
+    }
+  }
+}
