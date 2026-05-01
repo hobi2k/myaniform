@@ -366,6 +366,10 @@ function Download-Civitai {
     Write-Host "--- Civitai SDXL Anime ---"
     Civitai-Download "2682302" "$MODELS\checkpoints" "DasiwaIllustriousRealistic_v1.safetensors"
     Civitai-Download "2514310" "$MODELS\checkpoints" "waiIllustriousSDXL_v160.safetensors"
+    Civitai-Download "1915059" "$MODELS\checkpoints" "aMixIllustrious_aMix.safetensors"
+    Civitai-Download "2578565" "$MODELS\checkpoints" "JANKUTrainedChenkinNoobai_v69.safetensors"
+    Civitai-Download "1190596" "$MODELS\checkpoints" "noobaiXLNAIXL_vPred10Version.safetensors"
+    Civitai-Download "2343145" "$MODELS\checkpoints" "redLilyIllu_v10.safetensors"
 
     Write-Host ""
     Write-Host "--- Civitai SmoothMix Ultimate I2V High 대체 ---"

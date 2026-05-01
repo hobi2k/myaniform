@@ -379,8 +379,16 @@ download_civitai() {
     echo "━━━ Civitai — SDXL Anime Checkpoint ━━━━━━━━━━━━━━━━━━━━━━"
     # Dasiwa Illustrious (Realistic 계열 대체)
     civitai_dl "2682302" "$MODELS/checkpoints" "DasiwaIllustriousRealistic_v1.safetensors"
-    # 대체 옵션 - WAI-illustrious
+    # WAI-illustrious v16.0
     civitai_dl "2514310" "$MODELS/checkpoints" "waiIllustriousSDXL_v160.safetensors"
+    # A-mix [Illustrious]
+    civitai_dl "1915059" "$MODELS/checkpoints" "aMixIllustrious_aMix.safetensors"
+    # JANKU Trained + Chenkin & NoobAI + RouWei Illustrious XL v6.9
+    civitai_dl "2578565" "$MODELS/checkpoints" "JANKUTrainedChenkinNoobai_v69.safetensors"
+    # NoobAI-XL (NAI-XL) V-Pred 1.0
+    civitai_dl "1190596" "$MODELS/checkpoints" "noobaiXLNAIXL_vPred10Version.safetensors"
+    # Red Lily | Illu v1.0
+    civitai_dl "2343145" "$MODELS/checkpoints" "redLilyIllu_v10.safetensors"
 
     echo ""
     echo "━━━ Civitai — SmoothMix Ultimate (루프 I2V High 대체) ━━━━"

@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/ui/Layout";
+import EditStudioPage from "./pages/EditStudioPage";
 import GenerationPage from "./pages/GenerationPage";
 import ProjectEditorPage from "./pages/ProjectEditorPage";
 import ProjectListPage from "./pages/ProjectListPage";
@@ -11,6 +12,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectEditorPage />} />
+        <Route path="/projects/:projectId/edit-studio" element={<EditStudioPage />} />
         <Route path="/projects/:projectId/generate" element={<GenerationPage />} />
       </Route>
       {/* 워크플로우 뷰어: Layout 바깥 — iframe 전체 화면 */}

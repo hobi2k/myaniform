@@ -14,6 +14,7 @@ from ..services.comfyui_client import ensure_nodes_available, run_workflow
 from ..services.model_catalog import (
     CHARACTER_IMAGE_REQUIRED_MODEL_PATHS,
 )
+from ..services.scene_policy import compose_scene_image_prompts
 from ..services.workflow_patcher import (
     build_multi_ref_prompt,
     find_output_targets,
@@ -350,7 +351,10 @@ async def generate_image(
     await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 이미지 생성")
     _ensure_char_image_models("캐릭터 이미지 생성")
 
-    prompt = build_multi_ref_prompt([(char.name, char.description or "")], char.description or "")
+    image_params = _parse_json(char.image_params)
+    base_prompt = build_multi_ref_prompt([(char.name, char.description or "")], "")
+    prompt, scene_negative = compose_scene_image_prompts(base_prompt, image_params)
+    negative_prompt = scene_negative or char.negative_prompt
     wf = patch_image(
         prompt=prompt,
         character_refs=[{
@@ -359,9 +363,9 @@ async def generate_image(
             "image_path": char.sprite_path,
         }],
         workflow="qwen_edit",
-        negative_prompt=char.negative_prompt,
+        negative_prompt=negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
-        params=_parse_json(char.image_params),
+        params=image_params,
         output_prefix=f"projects/{project_id}/characters/{char_id}/image",
     )
     output_targets = find_output_targets(wf)
@@ -390,7 +394,10 @@ async def generate_image_stream(
     await ensure_nodes_available(_CHAR_IMAGE_REQUIRED_NODES, context="캐릭터 이미지 생성")
     _ensure_char_image_models("캐릭터 이미지 생성")
 
-    prompt = build_multi_ref_prompt([(char.name, char.description or "")], char.description or "")
+    image_params = _parse_json(char.image_params)
+    base_prompt = build_multi_ref_prompt([(char.name, char.description or "")], "")
+    prompt, scene_negative = compose_scene_image_prompts(base_prompt, image_params)
+    negative_prompt = scene_negative or char.negative_prompt
     wf = patch_image(
         prompt=prompt,
         character_refs=[{
@@ -399,9 +406,9 @@ async def generate_image_stream(
             "image_path": char.sprite_path,
         }],
         workflow="qwen_edit",
-        negative_prompt=char.negative_prompt,
+        negative_prompt=negative_prompt,
         resolution=(char.resolution_w, char.resolution_h),
-        params=_parse_json(char.image_params),
+        params=image_params,
         output_prefix=f"projects/{project_id}/characters/{char_id}/image",
     )
     output_targets = find_output_targets(wf)

@@ -39,7 +39,7 @@ export default function ProjectListPage() {
   });
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in container mx-auto max-w-6xl py-2">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">프로젝트</h1>

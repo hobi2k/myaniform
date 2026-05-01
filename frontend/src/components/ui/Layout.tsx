@@ -57,7 +57,7 @@ export default function Layout() {
           ComfyUI ↗
         </a>
       </header>
-      <main className="flex-1 container mx-auto px-4 py-6 max-w-6xl">
+      <main className="flex-1 flex flex-col px-4 py-4">
         <Outlet />
       </main>
     </div>

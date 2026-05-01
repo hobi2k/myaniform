@@ -442,14 +442,25 @@ def _apply_image_params(wf: dict, params: dict, resolution: tuple[Optional[int],
 def _apply_image_model(wf: dict, model_name: Optional[str], *, qwen_only: bool = False) -> None:
     if not model_name:
         return
+    is_gguf = model_name.lower().endswith(".gguf")
     for node in _iter_nodes(wf):
         cls = node.get("class_type", "")
         inp = node.setdefault("inputs", {})
         if cls == "CheckpointLoaderSimple" and not qwen_only and "ckpt_name" in inp:
+            if is_gguf:
+                continue
             inp["ckpt_name"] = model_name
         elif cls == "Efficient Loader 💬ED" and not qwen_only and "ckpt_name" in inp:
+            if is_gguf:
+                continue
             inp["ckpt_name"] = model_name
-        elif cls in ("UnetLoaderGGUF", "UNETLoader") and "unet_name" in inp:
+        elif cls == "UnetLoaderGGUF" and "unet_name" in inp:
+            if not is_gguf:
+                continue
+            inp["unet_name"] = model_name
+        elif cls == "UNETLoader" and "unet_name" in inp:
+            if is_gguf:
+                continue
             inp["unet_name"] = model_name
 
 
@@ -595,7 +606,7 @@ def _inject_qwen_reference_branch_into_original(
     qwen_layers = (
         max(1, int(params["qwen_layers"]))
         if "qwen_layers" in params
-        else max(3, len(ref_ids) + 1)
+        else len(ref_ids) + 1
     )
     latent = add_node(
         "EmptyQwenImageLayeredLatentImage",
@@ -682,26 +693,13 @@ def patch_image(
         if name:
             staged.append(name)
             staged_character_descs.append((r.get("name", ""), r.get("description", "")))
-    visual_staged = False
     for i, ref_path in enumerate(visual_refs or []):
         name = _stage_ref(ref_path, f"visualref_{i}")
         if name:
             staged.append(name)
-            visual_staged = True
 
     if staged_character_descs:
         prompt = build_multi_ref_prompt(staged_character_descs, prompt)
-        prompt = (
-            f"{prompt}. Reference role lock: each Picture label is a separate character identity. "
-            "Preserve each referenced character's face, hair, body silhouette, outfit, and color palette. "
-            "Do not swap faces, hairstyles, clothes, accessories, body proportions, or roles between referenced characters."
-        )
-
-    if visual_staged:
-        prompt = (
-            f"{prompt}. Use the last reference image only as continuity guidance for outfit, "
-            "color palette, lighting, and scene styling. Do not introduce it as a new character."
-        )
 
     # 3. 워크플로우 선택
     wf_name = (workflow or "qwen_edit").lower()
@@ -709,13 +707,15 @@ def patch_image(
     if wf_name == "qwen_edit" and not staged:
         raise RuntimeError("Qwen Edit 이미지 생성에는 캐릭터 스프라이트 레퍼런스가 필요합니다.")
 
-    # 4. 원본 이미지 워크플로우 기반 (SDXL + optional Qwen reference branch)
+    # 4. 원본 이미지 워크플로우 기반
+    #    - qwen_edit: SDXL 본체 + Qwen Edit 레퍼런스 브랜치 주입 (캐릭터 일관성)
+    #    - sdxl: 순수 SDXL 텍스트→이미지 (캐릭터 락 없음, 배경/무드샷용)
     if wf_name in ("sdxl", "qwen_edit"):
         wf = load_original_workflow(ORIGINAL_WORKFLOWS["scene_image"])
         _set_original_image_prompt_nodes(wf, prompt=prompt, negative_prompt=negative_prompt)
         _apply_image_params(wf, params, resolution)
         _apply_image_model(wf, image_model)
-        if staged:
+        if staged and wf_name == "qwen_edit":
             _inject_qwen_reference_branch_into_original(
                 wf,
                 staged_refs=staged,
