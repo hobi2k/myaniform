@@ -136,6 +136,45 @@ function Hf-DownloadRevision {
     $script:FAILED.Add("$Repo@$Revision/$PathInRepo") | Out-Null
 }
 
+function ExternalOrCivitai-Download {
+    # 외부 경로 우선, Civitai fallback. Windows 에서는 New-Item -ItemType SymbolicLink
+    # 가 관리자 권한 또는 개발자 모드 필요. 권한 없으면 Copy 로 fallback.
+    param(
+        [string]$ExternalPath,
+        [string]$VersionId,
+        [string]$DestDir,
+        [string]$DestName
+    )
+    $full = Join-Path $DestDir $DestName
+    if ($Mode -eq 'list') {
+        $extLabel = if ($ExternalPath) { $ExternalPath } else { '(없음)' }
+        $vidLabel = if ($VersionId) { $VersionId } else { '(없음)' }
+        Write-Host ("  [Ext/Civi] {0,-55}  <- {1} | vid={2}" -f $DestName, $extLabel, $vidLabel)
+        return
+    }
+    New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+    if (Test-Path $full) {
+        Write-Host ("  [OK] {0,-55}  (이미 존재)" -f $DestName)
+        return
+    }
+    if ($ExternalPath -and (Test-Path $ExternalPath)) {
+        try {
+            New-Item -ItemType SymbolicLink -Path $full -Target $ExternalPath -ErrorAction Stop | Out-Null
+            Write-Host ("  [LINK] {0,-55}  -> {1}" -f $DestName, $ExternalPath)
+        } catch {
+            Copy-Item -Path $ExternalPath -Destination $full -Force
+            Write-Host ("  [COPY] {0,-55}  (심링크 권한 없음, 복사)" -f $DestName)
+        }
+        return
+    }
+    if ($VersionId) {
+        Civitai-Download -VersionId $VersionId -DestDir $DestDir -DestName $DestName
+        return
+    }
+    Write-Host ("  [warn] {0,-55}  (외부에도 없고 vid 도 없음 - 수동 배치 필요)" -f $DestName)
+    $script:FAILED.Add("manual:$DestName") | Out-Null
+}
+
 function Civitai-Download {
     param(
         [string]$VersionId,
@@ -382,6 +421,19 @@ function Download-Civitai {
     Write-Host ""
     Write-Host "--- Civitai SmoothMix LoRA ---"
     Civitai-Download "2695694" "$MODELS\loras\wan_smoothmix" "SmoothMix_illustrious.safetensors"
+
+    Write-Host ""
+    Write-Host "--- Detailer / Quality LoRA (외부 우선, Civitai fallback) ---"
+    $SM_DET = "D:\Stable Diffusion\StabilityMatrix-win-x64\Data\Packages\ComfyUI\models\loras\detailer"
+    $DET_DIR = "$MODELS\loras\detailer"
+    ExternalOrCivitai-Download "$SM_DET\add-detail-xl.safetensors"                "135867"  $DET_DIR "add-detail-xl.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\AddMicroDetails_Illustrious_v5.safetensors" "1963644" $DET_DIR "AddMicroDetails_Illustrious_v5.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\AddMicroDetails_NoobAI_v4.safetensors"     "2692196" $DET_DIR "AddMicroDetails_NoobAI_v4.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\cfg_scale_boost.safetensors"               "947620"  $DET_DIR "cfg_scale_boost.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\XDetail_heavy.safetensors"                 "183638"  $DET_DIR "XDetail_heavy.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\XDetail_light.safetensors"                 "183635"  $DET_DIR "XDetail_light.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\NAI_vpred_fix.safetensors"                 ""        $DET_DIR "NAI_vpred_fix.safetensors"
+    ExternalOrCivitai-Download "$SM_DET\sdxl_enhance.safetensors"                  ""        $DET_DIR "sdxl_enhance.safetensors"
 }
 
 # ═══════════════════════════════════════════════════════════════════

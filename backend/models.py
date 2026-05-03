@@ -38,6 +38,11 @@ class Project(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     status:     GenerationStatus = GenerationStatus.idle
     output_path: Optional[str] = None  # 완성 영상 경로
+    # Composer M4 — 프로젝트 단위 BGM (배경음악) 트랙
+    bgm_path:        Optional[str] = None  # uploads/<project_id>_bgm.<ext>
+    measured_lufs:   Optional[float] = None  # 마지막 렌더의 LUFS 측정값 (캐시)
+    # Composer M5 — 오버레이 (자막/타이틀/스티커) 영구화. JSON list of EditOverlay.
+    overlays_json:   Optional[str] = None
 
 
 class ProjectCreate(SQLModel):
@@ -51,6 +56,9 @@ class ProjectRead(SQLModel):
     created_at:  datetime
     status:      GenerationStatus
     output_path: Optional[str]
+    bgm_path:      Optional[str] = None
+    measured_lufs: Optional[float] = None
+    overlays_json: Optional[str] = None
 
 
 # ── Character ─────────────────────────────────────────────────────────────
@@ -181,6 +189,24 @@ class Scene(SQLModel, table=True):
     image_path:   Optional[str] = None  # 장면 키프레임 png
     clip_path:    Optional[str] = None  # 최종 비디오
     clip_stale:   bool = False          # voice/image 변경 후 clip 갱신 필요 여부
+    clip_duration_sec: Optional[float] = None  # ffprobe 측정. Remotion Player 시간 배치용.
+
+    # ── 편집 메타 (Composer M3) ──
+    # 트림: 소스 클립 안에서 사용할 [in, out] 범위. None=전체 사용.
+    clip_in_offset_sec:  Optional[float] = None
+    clip_out_offset_sec: Optional[float] = None
+    # 클립 단위 재생 속도 배율 (0.25 ~ 4.0). None = 1.0.
+    clip_speed:          Optional[float] = None
+    # 클립 단위 음량. None = 1.0.
+    clip_voice_volume:   Optional[float] = None
+    clip_sfx_volume:     Optional[float] = None
+    # 이 씬 → 다음 씬으로 가는 트랜지션 (per-boundary override).
+    # None 이면 글로벌 EditRenderSettings 의 transition_style/sec 사용.
+    out_transition_style: Optional[str] = None
+    out_transition_sec:   Optional[float] = None
+    # 클립 단위 색감 프리셋 오버레이 (글로벌 grade 위에 chain).
+    # 값은 EditRenderSettings.color_preset 와 동일 enum 문자열.
+    clip_color_overlay:   Optional[str] = None
 
 
 class SceneCreate(SQLModel):
@@ -228,6 +254,15 @@ class SceneRead(SQLModel):
     image_path:         Optional[str]
     clip_path:          Optional[str]
     clip_stale:         bool
+    clip_duration_sec:  Optional[float] = None
+    clip_in_offset_sec:  Optional[float] = None
+    clip_out_offset_sec: Optional[float] = None
+    clip_speed:           Optional[float] = None
+    clip_voice_volume:    Optional[float] = None
+    clip_sfx_volume:      Optional[float] = None
+    out_transition_style: Optional[str]   = None
+    out_transition_sec:   Optional[float] = None
+    clip_color_overlay:   Optional[str]   = None
 
 
 # ── Generation event (SSE payload) ───────────────────────────────────────

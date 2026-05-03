@@ -21,6 +21,21 @@ _ADDITIVE_MIGRATIONS = [
     ("scene", "image_params",       "TEXT"),
     ("scene", "frame_source_mode",  "VARCHAR DEFAULT 'new_scene'"),
     ("scene", "video_params",       "TEXT"),
+    ("scene", "clip_duration_sec",   "REAL"),
+    # Composer M3
+    ("scene", "clip_in_offset_sec",  "REAL"),
+    ("scene", "clip_out_offset_sec", "REAL"),
+    ("scene", "clip_speed",          "REAL"),
+    ("scene", "clip_voice_volume",   "REAL"),
+    ("scene", "clip_sfx_volume",     "REAL"),
+    ("scene", "out_transition_style","VARCHAR"),
+    ("scene", "out_transition_sec",  "REAL"),
+    ("scene", "clip_color_overlay",  "VARCHAR"),
+    # Composer M4 — Project BGM
+    ("project", "bgm_path",          "VARCHAR"),
+    ("project", "measured_lufs",     "REAL"),
+    # Composer M5 — overlays
+    ("project", "overlays_json",     "TEXT"),
     # Phase 4: VNCCS sprite reference
     ("character", "sprite_path",    "VARCHAR"),
     # Character image advanced params

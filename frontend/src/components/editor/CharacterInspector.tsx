@@ -21,6 +21,8 @@ interface Props {
 
 export default function CharacterInspector({ projectId, character, onUpdated }: Props) {
   const referenceInputRef = useRef<HTMLInputElement>(null);
+  const spriteReplaceRef = useRef<HTMLInputElement>(null);
+  const imageReplaceRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
 
   const [desc, setDesc] = useState(character.description ?? "");
@@ -120,6 +122,16 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
 
   const uploadReference = useMutation({
     mutationFn: (file: File) => api.characters.uploadReferenceImage(projectId, character.id, file),
+    onSuccess: onUpdated,
+  });
+
+  const uploadSpriteReplace = useMutation({
+    mutationFn: (file: File) => api.characters.uploadSprite(projectId, character.id, file),
+    onSuccess: onUpdated,
+  });
+
+  const uploadImageReplace = useMutation({
+    mutationFn: (file: File) => api.characters.uploadImage(projectId, character.id, file),
     onSuccess: onUpdated,
   });
 
@@ -275,20 +287,46 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
         open={openStep === 1}
         onToggle={() => setOpenStep(openStep === 1 ? null : 1)}
         action={
-          <Button
-            size="sm"
-            variant="primary"
-            loading={busy && task.kind === "sprite"}
-            disabled={busy || !desc.trim() || (spriteMode === "reference" && !hasReference)}
-            onClick={(e) => {
-              e.stopPropagation();
-              startSprite(spriteMode);
-            }}
-          >
-            <Wand2 className="w-3 h-3" /> 생성
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              title="외부 편집본 업로드 — AI 결과 교체"
+              disabled={busy || uploadSpriteReplace.isPending}
+              loading={uploadSpriteReplace.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                spriteReplaceRef.current?.click();
+              }}
+            >
+              <Upload className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={busy && task.kind === "sprite"}
+              disabled={busy || !desc.trim() || (spriteMode === "reference" && !hasReference)}
+              onClick={(e) => {
+                e.stopPropagation();
+                startSprite(spriteMode);
+              }}
+            >
+              <Wand2 className="w-3 h-3" /> 생성
+            </Button>
+          </div>
         }
       >
+        <input
+          ref={spriteReplaceRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) uploadSpriteReplace.mutate(file);
+            e.target.value = "";
+          }}
+        />
         <MiniTabs<"new" | "reference">
           value={spriteMode}
           onChange={setSpriteMode}
@@ -357,20 +395,46 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
         open={openStep === 2}
         onToggle={() => setOpenStep(openStep === 2 ? null : 2)}
         action={
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={busy && task.kind === "image"}
-            disabled={busy || !hasSprite}
-            onClick={(e) => {
-              e.stopPropagation();
-              startImage();
-            }}
-          >
-            <ImageIcon className="w-3 h-3" /> 생성
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              title="외부 편집본 업로드 — AI 결과 교체"
+              disabled={busy || uploadImageReplace.isPending}
+              loading={uploadImageReplace.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                imageReplaceRef.current?.click();
+              }}
+            >
+              <Upload className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={busy && task.kind === "image"}
+              disabled={busy || !hasSprite}
+              onClick={(e) => {
+                e.stopPropagation();
+                startImage();
+              }}
+            >
+              <ImageIcon className="w-3 h-3" /> 생성
+            </Button>
+          </div>
         }
       >
+        <input
+          ref={imageReplaceRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) uploadImageReplace.mutate(file);
+            e.target.value = "";
+          }}
+        />
         <p className="text-[11px] text-gray-400 mb-2">
           씬 이미지 워크플로우(Qwen Edit + 스프라이트 레퍼런스)로 캐릭터 단독 컷을 만듭니다. 스프라이트는 얼굴/머리/체형/팔레트를 잠그는 레퍼런스로 들어가고, <span className="text-accent">아래 의상/포즈/구도/카메라/조명/스타일을 채워야</span> 그게 실제 씬에서 어떻게 적용되는지 보입니다. 모두 비우면 모델이 레퍼런스를 그대로 재현하기만 해서 스프라이트가 살짝 변형된 것만 나옵니다.
         </p>

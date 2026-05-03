@@ -82,11 +82,33 @@ class SubtitleStyle(BaseModel):
 
 
 class EditOverlay(BaseModel):
-    kind: Literal["title", "caption", "sticker"] = "caption"
-    text: str = Field(default="", max_length=240)
+    # 식별
+    id: str | None = None
+    # 종류
+    kind: Literal["title", "caption", "sticker", "shape", "image"] = "caption"
+    text: str = Field(default="", max_length=600)
+    image_url: str | None = None
     scene_index: int = Field(default=0, ge=0)
     start: float = Field(default=0.0, ge=0.0, le=3600.0)
-    duration: float = Field(default=3.0, ge=0.25, le=60.0)
+    duration: float = Field(default=3.0, ge=0.25, le=600.0)
+    # M5 위치/스타일
+    x: float | None = None
+    y: float | None = None
+    width: float | None = None
+    height: float | None = None
+    rotation: float | None = None
+    font_family: str | None = None
+    font_size: int | None = None
+    font_weight: int | None = None
+    color: str | None = None
+    shadow: str | None = None
+    outline: str | None = None
+    outline_width: float | None = None
+    background: str | None = None
+    padding: int | None = None
+    animation_in: Literal["none", "fade", "slide_up", "slide_left", "scale"] | None = None
+    animation_out: Literal["none", "fade", "slide_down", "slide_right", "scale"] | None = None
+    animation_duration: float | None = None
 
 
 class EditRenderRequest(BaseModel):
@@ -103,6 +125,11 @@ class EditRenderRequest(BaseModel):
     vignette_strength: float = Field(default=7.0, ge=0.0, le=20.0)
     subtitle_style: SubtitleStyle = Field(default_factory=SubtitleStyle)
     overlays: list[EditOverlay] = Field(default_factory=list)
+    # M4 BGM 옵션
+    bgm_volume: float = Field(default=0.5, ge=0.0, le=4.0)
+    bgm_loop: bool = True
+    bgm_fade_in: float = Field(default=0.0, ge=0.0, le=30.0)
+    bgm_fade_out: float = Field(default=0.0, ge=0.0, le=30.0)
 
 
 def _sse(data: dict) -> str:
@@ -411,26 +438,58 @@ def render_edit(
         raise HTTPException(404)
 
     scenes, clips = _clip_paths_for_project(project_id, session)
-    transition = _transition_to_ffmpeg(payload.transition_style)
-    transition_frames = 0 if transition == "cut" else max(1, round(payload.transition_sec * payload.fps))
+
+    # ── M6 Step 1: per-clip pre-processing ────────────────────────────
+    # Apply trim / speed / volume / per-clip color overlay to each scene's
+    # source clip. If a scene has no overrides, prepare_clip returns the
+    # original path (no re-encode).
+    work_dir = OUTPUT_DIR / f"{project_id}_edit_work"
+    prepared: list[Path] = [
+        ffmpeg.prepare_clip(
+            src=clip,
+            work_dir=work_dir,
+            scene_id=scene.id,
+            clip_in_offset_sec=scene.clip_in_offset_sec,
+            clip_out_offset_sec=scene.clip_out_offset_sec,
+            clip_speed=scene.clip_speed,
+            clip_voice_volume=scene.clip_voice_volume,
+            clip_sfx_volume=scene.clip_sfx_volume,
+            clip_color_overlay=scene.clip_color_overlay,
+        )
+        for scene, clip in zip(scenes, clips)
+    ]
+
+    # ── M6 Step 2: per-boundary transitions ────────────────────────────
+    # Build a (style, sec) tuple for each boundary. Outgoing scene's
+    # `out_transition_*` overrides the global default.
+    boundaries: list[tuple[str, float]] = []
+    for i in range(len(scenes) - 1):
+        cur = scenes[i]
+        style = cur.out_transition_style or payload.transition_style
+        sec = cur.out_transition_sec if cur.out_transition_sec is not None else payload.transition_sec
+        boundaries.append((_transition_to_ffmpeg(style), float(sec or 0.0)))
+
     rough = ffmpeg.concat(
-        clips,
-        transition=transition,
-        duration_frames=transition_frames,
+        prepared,
+        transition=_transition_to_ffmpeg(payload.transition_style),
+        duration_frames=0 if payload.transition_sec <= 0 else max(1, round(payload.transition_sec * payload.fps)),
         fps=payload.fps,
         project_id=f"{project_id}_edit_rough",
         audio_sample_rate=payload.audio_sample_rate,
+        transitions=boundaries if boundaries else None,
     )
 
-    first_w, first_h = ffmpeg.get_video_size(clips[0])
+    first_w, first_h = ffmpeg.get_video_size(prepared[0])
     width = payload.width or first_w
     height = payload.height or first_h
+
+    # ── M6 Step 3: finish (color grade / vignette / grain / subtitles + overlays) ──
     final = ffmpeg.finish_visual_novel_episode(
         rough,
         output=OUTPUT_DIR / f"{project_id}_edit.mp4",
         subtitles=[scene.dialogue or "" for scene in scenes],
-        scene_durations=[ffmpeg.get_duration(path) for path in clips],
-        transition_sec=payload.transition_sec if transition != "cut" else 0.0,
+        scene_durations=[ffmpeg.get_duration(path) for path in prepared],
+        transition_sec=payload.transition_sec,
         width=width,
         height=height,
         audio_sample_rate=payload.audio_sample_rate,
@@ -441,10 +500,173 @@ def render_edit(
         vignette_strength=payload.vignette_strength,
         overlays=[overlay.model_dump() for overlay in payload.overlays],
         subtitle_style=payload.subtitle_style.model_dump(),
+        boundary_secs=[sec for _, sec in boundaries] if boundaries else None,
     )
+
+    # ── M6 Step 4: BGM (if project has one) ────────────────────────────
+    if project.bgm_path and Path(project.bgm_path).exists():
+        bgm_final = OUTPUT_DIR / f"{project_id}_edit_bgm.mp4"
+        final = ffmpeg.add_bgm_track(
+            final,
+            Path(project.bgm_path),
+            output=bgm_final,
+            main_duration_sec=ffmpeg.get_duration(final),
+            bgm_volume=payload.bgm_volume,
+            fade_in=payload.bgm_fade_in,
+            fade_out=payload.bgm_fade_out,
+            loop=payload.bgm_loop,
+        )
 
     project.output_path = str(final)
     project.status = GenerationStatus.completed
     session.add(project)
     session.commit()
     return {"output_path": str(final)}
+
+
+@router.post("/render_edit/stream")
+async def render_edit_stream(
+    project_id: str,
+    payload: EditRenderRequest,
+    session: Session = Depends(get_session),
+):
+    """SSE-streamed variant of render_edit. Emits progress events for each
+    of the 4 ffmpeg steps so the frontend can show a real progress bar
+    instead of a spinner.
+
+    Event shapes:
+      data: {"type": "status", "stage": "<id>", "message": "...", "progress_pct": 0..100}
+      data: {"type": "complete", "output_path": "..."}
+      data: {"type": "error", "message": "..."}
+    """
+    import asyncio
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(404)
+
+    scenes, clips = _clip_paths_for_project(project_id, session)
+
+    async def stream():
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        def emit(stage: str, message: str, pct: int):
+            payload = {"type": "status", "stage": stage, "message": message, "progress_pct": pct}
+            asyncio.get_event_loop().call_soon_threadsafe(
+                queue.put_nowait, _sse(payload)
+            )
+
+        async def worker():
+            try:
+                # Step 1: per-clip pre-processing.
+                emit("prepare", f"클립 전처리 시작 (씬 {len(scenes)}개)", 5)
+                work_dir = OUTPUT_DIR / f"{project_id}_edit_work"
+                prepared: list[Path] = []
+                for i, (scene, clip) in enumerate(zip(scenes, clips)):
+                    emit("prepare", f"씬 #{i + 1} 전처리 (트림/속도/색감)", 5 + int(20 * (i + 1) / max(1, len(scenes))))
+                    prepared.append(
+                        await asyncio.to_thread(
+                            ffmpeg.prepare_clip,
+                            src=clip,
+                            work_dir=work_dir,
+                            scene_id=scene.id,
+                            clip_in_offset_sec=scene.clip_in_offset_sec,
+                            clip_out_offset_sec=scene.clip_out_offset_sec,
+                            clip_speed=scene.clip_speed,
+                            clip_voice_volume=scene.clip_voice_volume,
+                            clip_sfx_volume=scene.clip_sfx_volume,
+                            clip_color_overlay=scene.clip_color_overlay,
+                        )
+                    )
+
+                # Step 2: per-boundary transitions + concat.
+                emit("concat", "트랜지션 + concat 합성 중", 30)
+                boundaries: list[tuple[str, float]] = []
+                for i in range(len(scenes) - 1):
+                    cur = scenes[i]
+                    style = cur.out_transition_style or payload.transition_style
+                    sec = cur.out_transition_sec if cur.out_transition_sec is not None else payload.transition_sec
+                    boundaries.append((_transition_to_ffmpeg(style), float(sec or 0.0)))
+
+                rough = await asyncio.to_thread(
+                    ffmpeg.concat,
+                    prepared,
+                    transition=_transition_to_ffmpeg(payload.transition_style),
+                    duration_frames=0 if payload.transition_sec <= 0 else max(1, round(payload.transition_sec * payload.fps)),
+                    fps=payload.fps,
+                    project_id=f"{project_id}_edit_rough",
+                    audio_sample_rate=payload.audio_sample_rate,
+                    transitions=boundaries if boundaries else None,
+                )
+                emit("concat", "트랜지션 + concat 완료", 55)
+
+                first_w, first_h = await asyncio.to_thread(ffmpeg.get_video_size, prepared[0])
+                width = payload.width or first_w
+                height = payload.height or first_h
+
+                # Step 3: finish.
+                emit("finish", "색감 + 자막 + 오버레이 적용 중", 60)
+                durations = [await asyncio.to_thread(ffmpeg.get_duration, p) for p in prepared]
+                final = await asyncio.to_thread(
+                    ffmpeg.finish_visual_novel_episode,
+                    rough,
+                    output=OUTPUT_DIR / f"{project_id}_edit.mp4",
+                    subtitles=[scene.dialogue or "" for scene in scenes],
+                    scene_durations=durations,
+                    transition_sec=payload.transition_sec,
+                    width=width,
+                    height=height,
+                    audio_sample_rate=payload.audio_sample_rate,
+                    target_lufs=payload.target_lufs,
+                    loudness_range_lu=payload.loudness_range_lu,
+                    color_preset=payload.color_preset,
+                    grain_strength=payload.grain_strength,
+                    vignette_strength=payload.vignette_strength,
+                    overlays=[overlay.model_dump() for overlay in payload.overlays],
+                    subtitle_style=payload.subtitle_style.model_dump(),
+                    boundary_secs=[sec for _, sec in boundaries] if boundaries else None,
+                )
+                emit("finish", "색감 + 자막 + 오버레이 완료", 85)
+
+                # Step 4: BGM.
+                if project.bgm_path and Path(project.bgm_path).exists():
+                    emit("bgm", "BGM 트랙 믹싱", 90)
+                    bgm_final = OUTPUT_DIR / f"{project_id}_edit_bgm.mp4"
+                    final_dur = await asyncio.to_thread(ffmpeg.get_duration, final)
+                    final = await asyncio.to_thread(
+                        ffmpeg.add_bgm_track,
+                        final,
+                        Path(project.bgm_path),
+                        output=bgm_final,
+                        main_duration_sec=final_dur,
+                        bgm_volume=payload.bgm_volume,
+                        fade_in=payload.bgm_fade_in,
+                        fade_out=payload.bgm_fade_out,
+                        loop=payload.bgm_loop,
+                    )
+                    emit("bgm", "BGM 믹싱 완료", 98)
+                else:
+                    emit("bgm", "BGM 없음 — 스킵", 95)
+
+                project.output_path = str(final)
+                project.status = GenerationStatus.completed
+                session.add(project)
+                session.commit()
+                emit("complete", "최종 편집본 렌더 완료", 100)
+                await queue.put(_sse({"type": "complete", "output_path": str(final)}))
+            except Exception as exc:
+                await queue.put(_sse({"type": "error", "message": str(exc)}))
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream(), media_type="text/event-stream")

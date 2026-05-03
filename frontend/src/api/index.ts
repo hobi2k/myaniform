@@ -24,6 +24,22 @@ export const api = {
       request<Project>("/projects", { method: "POST", body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<void>(`/projects/${id}`, { method: "DELETE" }),
+    uploadBgm: (id: string, file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return fetch(`${BASE}/projects/${id}/bgm/upload`, {
+        method: "POST",
+        body: form,
+      }).then((r) => r.json() as Promise<Project>);
+    },
+    deleteBgm: (id: string) =>
+      request<Project>(`/projects/${id}/bgm`, { method: "DELETE" }),
+
+    updateOverlays: (id: string, overlays: import("../types").EditOverlay[]) =>
+      request<Project>(`/projects/${id}/overlays`, {
+        method: "PUT",
+        body: JSON.stringify({ overlays }),
+      }),
   },
 
   characters: {
@@ -46,6 +62,24 @@ export const api = {
       const form = new FormData();
       form.append("file", file);
       return fetch(`${BASE}/projects/${projectId}/characters/${charId}/reference/upload`, {
+        method: "POST",
+        body: form,
+      }).then((r) => r.json() as Promise<Character>);
+    },
+
+    uploadSprite: (projectId: string, charId: string, file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return fetch(`${BASE}/projects/${projectId}/characters/${charId}/sprite/upload`, {
+        method: "POST",
+        body: form,
+      }).then((r) => r.json() as Promise<Character>);
+    },
+
+    uploadImage: (projectId: string, charId: string, file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return fetch(`${BASE}/projects/${projectId}/characters/${charId}/image/upload`, {
         method: "POST",
         body: form,
       }).then((r) => r.json() as Promise<Character>);
@@ -108,6 +142,20 @@ export const api = {
       }),
     regenerateVideo: (projectId: string, sceneId: string) =>
       request<Scene>(`/projects/${projectId}/scenes/${sceneId}/regenerate/video`, {
+        method: "POST",
+      }),
+
+    uploadImage: (projectId: string, sceneId: string, file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return fetch(`${BASE}/projects/${projectId}/scenes/${sceneId}/image/upload`, {
+        method: "POST",
+        body: form,
+      }).then((r) => r.json() as Promise<Scene>);
+    },
+
+    probeDurations: (projectId: string) =>
+      request<{ updated: number; total: number }>(`/projects/${projectId}/scenes/probe_durations`, {
         method: "POST",
       }),
   },

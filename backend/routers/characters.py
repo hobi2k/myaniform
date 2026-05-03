@@ -335,6 +335,44 @@ async def upload_reference_image(
     return char
 
 
+@router.post("/{char_id}/sprite/upload", response_model=CharacterRead)
+async def upload_sprite(
+    project_id: str,
+    char_id: str,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    """외부 편집(포토샵/클립스튜디오 등)으로 리터칭한 스프라이트를 업로드해 AI 생성본을 교체한다."""
+    char = _get_char(project_id, char_id, session)
+    dest = UPLOAD_DIR / f"{char_id}_sprite.png"
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    char.sprite_path = str(dest)
+    session.add(char)
+    session.commit()
+    session.refresh(char)
+    return char
+
+
+@router.post("/{char_id}/image/upload", response_model=CharacterRead)
+async def upload_character_image(
+    project_id: str,
+    char_id: str,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    """씬 프리뷰(캐릭터 단독 컷)의 AI 결과를 외부 편집본으로 교체한다."""
+    char = _get_char(project_id, char_id, session)
+    dest = UPLOAD_DIR / f"{char_id}_generated.png"
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    char.image_path = str(dest)
+    session.add(char)
+    session.commit()
+    session.refresh(char)
+    return char
+
+
 # ── 이미지 AI 생성 ────────────────────────────────────────────────────────
 
 @router.post("/{char_id}/image/generate", response_model=CharacterRead)

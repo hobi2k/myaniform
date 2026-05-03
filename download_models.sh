@@ -120,6 +120,52 @@ hf_rev_dl() {
     return 0
 }
 
+external_or_civitai_dl() {
+    # external_or_civitai_dl <external_path> <vid_or_empty> <dest_dir> <dest_filename>
+    # 1) dest_dir/<dest_filename> 이 이미 있으면 (또는 심링크 깨지지 않았으면) 스킵
+    # 2) <external_path> 에 파일 있으면 심링크 생성 (외장하드의 별도 폴더에서 가져옴)
+    # 3) <vid> 가 비어있지 않으면 Civitai 에서 다운로드
+    # 4) 다 실패하면 경고만 — 사용자가 수동으로 배치하도록
+    local ext="$1"
+    local vid="$2"
+    local dest_dir="$3"
+    local dest_name="$4"
+    local full="$dest_dir/$dest_name"
+
+    if [ "$MODE" = "--list" ]; then
+        printf "  [Ext/Civi]%-55s  ← %s | vid=%s\n" "$dest_name" "${ext:-(없음)}" "${vid:-(없음)}"
+        return
+    fi
+    mkdir -p "$dest_dir"
+
+    # 이미 존재 (실제 파일 또는 유효한 심링크)
+    if [ -s "$full" ] || { [ -L "$full" ] && [ -e "$full" ]; }; then
+        printf "  ✓ %-55s  (이미 존재)\n" "$dest_name"
+        return
+    fi
+    # 깨진 심링크 정리
+    if [ -L "$full" ] && ! [ -e "$full" ]; then
+        rm -f "$full"
+    fi
+
+    # 외부 경로에 있으면 심링크
+    if [ -n "$ext" ] && [ -f "$ext" ]; then
+        ln -s "$ext" "$full"
+        printf "  ↗ %-55s  (외부 심링크: %s)\n" "$dest_name" "$ext"
+        return
+    fi
+
+    # Civitai fallback
+    if [ -n "$vid" ]; then
+        civitai_dl "$vid" "$dest_dir" "$dest_name"
+        return $?
+    fi
+
+    printf "  ⚠ %-55s  (외부에도 없고 Civitai vid 도 없음 — 수동 배치 필요)\n" "$dest_name"
+    FAILED_DOWNLOADS+=("manual:$dest_name")
+    return 0
+}
+
 civitai_dl() {
     # civitai_dl <version_id> <local_dir> <local_filename>
     local vid="$1"
@@ -401,6 +447,23 @@ download_civitai() {
     echo ""
     echo "━━━ Civitai — SmoothMix LoRA (애니메이션 모션) ━━━━━━━━━━━"
     civitai_dl "2695694" "$MODELS/loras/wan_smoothmix" "SmoothMix_illustrious.safetensors"
+
+    echo ""
+    echo "━━━ Detailer / Quality LoRA (외부 우선, Civitai fallback) ━━"
+    # 사용자의 StabilityMatrix 폴더에 이미 받아둔 파일이 있으면 거기를 심링크.
+    # 외부에도 없고 vid 도 있으면 Civitai 에서 받아옴. NAI_vpred_fix / sdxl_enhance
+    # 는 model 99619 가 비공개라 vid 미상 — 외부 파일 fallback 만.
+    local SM_DET="/mnt/d/Stable Diffusion/StabilityMatrix-win-x64/Data/Packages/ComfyUI/models/loras/detailer"
+    local DET_DIR="$MODELS/loras/detailer"
+    external_or_civitai_dl "$SM_DET/add-detail-xl.safetensors"                "135867"  "$DET_DIR" "add-detail-xl.safetensors"
+    external_or_civitai_dl "$SM_DET/AddMicroDetails_Illustrious_v5.safetensors" "1963644" "$DET_DIR" "AddMicroDetails_Illustrious_v5.safetensors"
+    external_or_civitai_dl "$SM_DET/AddMicroDetails_NoobAI_v4.safetensors"     "2692196" "$DET_DIR" "AddMicroDetails_NoobAI_v4.safetensors"
+    external_or_civitai_dl "$SM_DET/cfg_scale_boost.safetensors"               "947620"  "$DET_DIR" "cfg_scale_boost.safetensors"
+    external_or_civitai_dl "$SM_DET/XDetail_heavy.safetensors"                 "183638"  "$DET_DIR" "XDetail_heavy.safetensors"
+    external_or_civitai_dl "$SM_DET/XDetail_light.safetensors"                 "183635"  "$DET_DIR" "XDetail_light.safetensors"
+    # 두 개는 model 99619 의 다른 버전 (Civitai 에서 model 페이지 비공개라 vid 추적 불가, 외부 fallback 만)
+    external_or_civitai_dl "$SM_DET/NAI_vpred_fix.safetensors"                 ""        "$DET_DIR" "NAI_vpred_fix.safetensors"
+    external_or_civitai_dl "$SM_DET/sdxl_enhance.safetensors"                  ""        "$DET_DIR" "sdxl_enhance.safetensors"
 }
 
 # ═══════════════════════════════════════════════════════════════════

@@ -19,6 +19,9 @@ export interface Project {
   created_at: string;
   status: GenerationStatus;
   output_path: string | null;
+  bgm_path: string | null;
+  measured_lufs: number | null;
+  overlays_json: string | null;
 }
 
 export interface Character {
@@ -175,6 +178,16 @@ export interface Scene {
   image_path: string | null;
   clip_path: string | null;
   clip_stale: boolean;
+  clip_duration_sec: number | null;
+  // Composer M3: per-clip 편집 메타
+  clip_in_offset_sec: number | null;
+  clip_out_offset_sec: number | null;
+  clip_speed: number | null;
+  clip_voice_volume: number | null;
+  clip_sfx_volume: number | null;
+  out_transition_style: EditTransitionStyle | null;
+  out_transition_sec: number | null;
+  clip_color_overlay: ColorPreset | null;
 }
 
 export interface LoraEntry {
@@ -212,12 +225,38 @@ export interface GenerationEvent {
 export type EditTransitionStyle = "cut" | "soft" | "fade" | "dip_to_black" | "flash";
 export type ColorPreset = "reference_soft" | "warm_room" | "clean_neutral" | "dream_blush";
 
+export type OverlayAnimationIn = "none" | "fade" | "slide_up" | "slide_left" | "scale";
+export type OverlayAnimationOut = "none" | "fade" | "slide_down" | "slide_right" | "scale";
+
 export interface EditOverlay {
-  kind: "title" | "caption" | "sticker";
-  text: string;
+  /** 오버레이 ID — 클라이언트에서 부여 (uuid 또는 timestamp). 영구화 후 안정 식별자. */
+  id?: string;
+  kind: "title" | "caption" | "sticker" | "shape" | "image";
+  text?: string;
+  image_url?: string;
   scene_index: number;
   start: number;
   duration: number;
+  // 위치/크기 — 화면 비율 (0..1) 로 저장. 해상도 무관.
+  x?: number;
+  y?: number;
+  width?: number;       // 0..1, optional
+  height?: number;      // 0..1, optional
+  rotation?: number;    // degrees
+  // 스타일
+  font_family?: string;
+  font_size?: number;   // px (Player 컨테이너 기준)
+  font_weight?: number;
+  color?: string;
+  shadow?: string;
+  outline?: string;
+  outline_width?: number;
+  background?: string;
+  padding?: number;
+  // 애니메이션
+  animation_in?: OverlayAnimationIn;
+  animation_out?: OverlayAnimationOut;
+  animation_duration?: number; // sec, default 0.4
 }
 
 export interface EditRenderSettings {
@@ -239,4 +278,9 @@ export interface EditRenderSettings {
     shadow: number;
   };
   overlays?: EditOverlay[];
+  // Composer M4 — BGM 트랙 옵션
+  bgm_volume?: number;       // 0..2, 기본 0.5
+  bgm_loop?: boolean;        // true 면 BGM 길이 < 영상 길이일 때 반복
+  bgm_fade_in?: number;      // sec, 시작 페이드인
+  bgm_fade_out?: number;     // sec, 끝 페이드아웃
 }

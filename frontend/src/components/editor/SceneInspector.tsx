@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Image as ImageIcon, Mic, Network, Settings2, Trash2, Video } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Clapperboard, Image as ImageIcon, Mic, Network, Settings2, Trash2, Upload, Video } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { DEFAULT_IMAGE_PARAMS, DEFAULT_VIDEO_PARAMS } from "../../constants/modelCatalog";
@@ -68,6 +68,7 @@ export default function SceneInspector({
   }));
   const [openStep, setOpenStep] = useState<number | null>(0);
   const charIds = parseCharIds(form.character_ids_json);
+  const imageReplaceRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setForm({
@@ -126,6 +127,14 @@ export default function SceneInspector({
   });
   const regenVideo = useMutation({
     mutationFn: () => persistThenRun(() => api.scenes.regenerateVideo(projectId, scene.id)),
+    onSuccess: (s) => {
+      onUpdated(s);
+      qc.invalidateQueries({ queryKey: ["scenes", projectId] });
+    },
+  });
+
+  const uploadImage = useMutation({
+    mutationFn: (file: File) => api.scenes.uploadImage(projectId, scene.id, file),
     onSuccess: (s) => {
       onUpdated(s);
       qc.invalidateQueries({ queryKey: ["scenes", projectId] });
@@ -340,20 +349,46 @@ export default function SceneInspector({
         open={openStep === 2}
         onToggle={() => setOpenStep(openStep === 2 ? null : 2)}
         action={
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={regenImage.isPending}
-            disabled={!(form.bg_prompt ?? "").trim() || charIds.length === 0}
-            onClick={(e) => {
-              e.stopPropagation();
-              regenImage.mutate();
-            }}
-          >
-            <ImageIcon className="w-3 h-3" /> 장면샷 생성
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              title="외부 편집본 업로드 — AI 결과 교체"
+              disabled={uploadImage.isPending}
+              loading={uploadImage.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                imageReplaceRef.current?.click();
+              }}
+            >
+              <Upload className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={regenImage.isPending}
+              disabled={!(form.bg_prompt ?? "").trim() || charIds.length === 0}
+              onClick={(e) => {
+                e.stopPropagation();
+                regenImage.mutate();
+              }}
+            >
+              <ImageIcon className="w-3 h-3" /> 장면샷 생성
+            </Button>
+          </div>
         }
       >
+        <input
+          ref={imageReplaceRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) uploadImage.mutate(file);
+            e.target.value = "";
+          }}
+        />
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>

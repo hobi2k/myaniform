@@ -2,7 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -288,6 +288,31 @@ async def regenerate_image(
     return s
 
 
+@router.post("/{scene_id}/image/upload", response_model=SceneRead)
+async def upload_scene_image(
+    project_id: str,
+    scene_id: str,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    """외부 편집본으로 씬 장면샷 이미지를 교체한다.
+    영상 클립이 이미 있으면 stale 표시(이미지가 바뀌었으니 영상 재생성 필요)."""
+    s = _get_scene(project_id, scene_id, session)
+    ext = Path(file.filename or "").suffix or ".png"
+    tmp = OUTPUT_DIR / f"scene_{scene_id}_uploaded{ext}"
+    with open(tmp, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    staged = _stage_into_input(tmp, f"scene_image_{scene_id}")
+
+    s.image_path = staged
+    if s.clip_path:
+        s.clip_stale = True
+    session.add(s)
+    session.commit()
+    session.refresh(s)
+    return s
+
+
 @router.post("/{scene_id}/regenerate/video", response_model=SceneRead)
 async def regenerate_video(
     project_id: str, scene_id: str, session: Session = Depends(get_session)
@@ -366,7 +391,40 @@ async def regenerate_video(
 
     s.clip_path = str(dest)
     s.clip_stale = False
+    try:
+        s.clip_duration_sec = ffmpeg.get_duration(dest)
+    except Exception:
+        s.clip_duration_sec = None
     session.add(s)
     session.commit()
     session.refresh(s)
     return s
+
+
+@router.post("/probe_durations")
+async def probe_clip_durations(
+    project_id: str,
+    session: Session = Depends(get_session),
+):
+    """현 프로젝트의 모든 씬에 대해 clip_path 가 있고 clip_duration_sec 가 비어있으면 ffprobe 로 채움.
+    Remotion Player 도입 시 기존 클립의 길이 메타를 백필하기 위한 일회성 라우트."""
+    scenes = session.exec(
+        select(Scene).where(Scene.project_id == project_id)
+    ).all()
+    updated = 0
+    for s in scenes:
+        if not s.clip_path:
+            continue
+        path = Path(s.clip_path)
+        if not path.exists():
+            continue
+        if s.clip_duration_sec and s.clip_duration_sec > 0:
+            continue
+        try:
+            s.clip_duration_sec = ffmpeg.get_duration(path)
+            session.add(s)
+            updated += 1
+        except Exception:
+            continue
+    session.commit()
+    return {"updated": updated, "total": len(scenes)}
