@@ -46,6 +46,12 @@ _COMFY_INPUT = Path(__file__).resolve().parent.parent / "ComfyUI" / "input"
 _COMFY_INPUT.mkdir(parents=True, exist_ok=True)
 app.mount("/comfy_input", StaticFiles(directory=str(_COMFY_INPUT)), name="comfy_input")
 
+# 색감 프리셋용 3D LUT(.cube) 정적 서빙. WebGL2 LUTRenderer가 fetch 한다.
+# `assets/luts` 가 비어있어도(아직 bake 안한 상태) 프런트는 graceful fallback.
+_LUTS_DIR = Path(__file__).resolve().parent.parent / "assets" / "luts"
+_LUTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/luts", StaticFiles(directory=str(_LUTS_DIR)), name="luts")
+
 
 @app.on_event("startup")
 def on_startup():

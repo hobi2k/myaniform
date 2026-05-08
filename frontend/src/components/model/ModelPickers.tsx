@@ -65,6 +65,35 @@ export function ImageModelPicker({
   return <InstalledModelSelect label={label} models={models} value={value} onChange={onChange} />;
 }
 
+/**
+ * SDXL 베이스 체크포인트 전용 picker. qwen_edit 워크플로우의 CheckpointLoaderSimple
+ * 슬롯들에 라우팅되어, Qwen UNet 과 별개로 SDXL 본체(animagineXL/aMix/JAKNU/...)
+ * 를 고를 수 있게 한다. ImageParams.checkpoint 필드와 짝.
+ */
+export function CheckpointModelPicker({
+  value,
+  onChange,
+  label = "베이스 체크포인트 (SDXL)",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label?: string;
+}) {
+  const { data } = useQuery({
+    queryKey: ["image-models"],
+    queryFn: () => api.imageModels.list(),
+    staleTime: 60_000,
+  });
+  return (
+    <InstalledModelSelect
+      label={label}
+      models={data?.checkpoints ?? []}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
 export function DiffusionModelPicker({
   category,
   value,

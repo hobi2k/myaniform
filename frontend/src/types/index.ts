@@ -64,7 +64,11 @@ export interface LoraSelection {
 export type ImageWorkflowKind = "qwen_edit" | "sdxl";
 
 export interface ImageParams {
+  /** Primary model — qwen_edit 모드에선 Qwen Edit UNet, sdxl 모드에선 SDXL 체크포인트. */
   model?: string;
+  /** qwen_edit 모드 전용: SDXL 베이스 체크포인트 (animagineXL/aMix/JAKNU/...).
+   *  workflow 내 CheckpointLoaderSimple 슬롯들에 라우팅. sdxl 모드에선 무시. */
+  checkpoint?: string;
   wardrobe_prompt?: string;
   outfit_prompt?: string;
   pose_prompt?: string;

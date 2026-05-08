@@ -11,6 +11,7 @@ export default defineConfig({
       "/voices": "http://localhost:8000",
       "/output": "http://localhost:8000",
       "/comfy_input": "http://localhost:8000",
+      "/luts": "http://localhost:8000",
     },
   },
 });

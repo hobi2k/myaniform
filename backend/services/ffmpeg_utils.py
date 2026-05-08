@@ -106,8 +106,34 @@ _COLOR_FILTERS: dict[str, list[str]] = {
 }
 
 
+_LUTS_DIR = Path(__file__).resolve().parents[2] / "assets" / "luts"
+
+
+def _lut3d_path_for(preset: str) -> Path | None:
+    """Return the baked .cube path for ``preset`` if it exists, else ``None``.
+
+    The bake step (``scripts/generate_color_luts.py``) freezes each ffmpeg
+    filter chain into a 33³ 3D LUT so the WebGL preview and the ffmpeg final
+    render apply byte-identical color transforms (Strategy A pixel-match).
+    """
+    cube = _LUTS_DIR / f"{preset}.cube"
+    return cube if cube.is_file() else None
+
+
 def color_filter_chain(preset: str) -> list[str]:
-    """Public: returns ffmpeg filter chain for a color preset name."""
+    """Public: returns ffmpeg filter chain for a color preset name.
+
+    Prefers the baked 3D LUT (``lut3d=…``) when available — that's the same
+    file the WebGL2 LUTRenderer samples for the live preview, guaranteeing the
+    final render matches what the editor showed. Falls back to the original
+    ``eq``/``colorbalance``/``curves`` chain when the .cube file is missing
+    (fresh checkout pre-bake, or unknown preset).
+    """
+    cube = _lut3d_path_for(preset)
+    if cube is not None:
+        # Path forward-slashed and quoted so ffmpeg parses Windows-style paths
+        # correctly when the repo is mounted via WSL.
+        return [f"lut3d='{cube.as_posix()}'"]
     return list(_COLOR_FILTERS.get(preset, _COLOR_FILTERS["reference_soft"]))
 
 

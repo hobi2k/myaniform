@@ -5,7 +5,7 @@ import {
   SAMPLER_OPTIONS,
 } from "../../constants/modelCatalog";
 import type { ImageParams, ImageWorkflowKind, LoraSelection } from "../../types";
-import { ImageModelPicker } from "../model/ModelPickers";
+import { CheckpointModelPicker, ImageModelPicker } from "../model/ModelPickers";
 import LoraPicker from "./LoraPicker";
 import NumberParam from "./NumberParam";
 import PromptParam from "./PromptParam";
@@ -36,6 +36,16 @@ export default function ImageParamsEditor({ workflow, value, onChange, showScene
         value={value.model ?? ""}
         onChange={(model) => set("model", model || undefined)}
       />
+
+      {/* qwen_edit 워크플로우는 Qwen Edit UNet + SDXL 베이스 체크포인트 조합으로 동작.
+          위 picker 가 Qwen UNet 을 고르고, 아래 picker 가 본체 체크포인트(animagineXL/aMix/...)
+          를 고른다. 두 슬롯이 분리되어 있어야 베이스를 바꿔도 Qwen 락이 유지된다. */}
+      {workflow === "qwen_edit" && (
+        <CheckpointModelPicker
+          value={value.checkpoint ?? ""}
+          onChange={(ckpt) => set("checkpoint", ckpt || undefined)}
+        />
+      )}
 
       {showSceneDirection && (
         <div className="rounded-lg border border-white/5 bg-black/10 p-2">

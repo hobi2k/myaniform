@@ -4,6 +4,9 @@ import { useAudioRoute } from "./audio/useAudioRoute";
 import { colorGradeFilter } from "./colorGrade";
 import { useClipSync } from "./useClipSync";
 import type { ClipSlot } from "./types";
+import type { ColorPreset } from "../types";
+import LUTVideo from "./webgl/LUTVideo";
+import { lutUrlForPreset } from "./webgl/lutCache";
 
 interface Props {
   slot: ClipSlot;
@@ -15,6 +18,9 @@ interface Props {
   nearWindow: boolean;
   /** Layer-specific transform/opacity from transitions or grade. */
   style?: CSSProperties;
+  /** Global color preset from composition.settings — passed in so it can be
+   *  applied as a 3D LUT in the WebGL pipeline (Strategy A pixel match). */
+  globalPreset?: ColorPreset | null;
 }
 
 /**
@@ -25,7 +31,7 @@ interface Props {
  * transitions can blend two clips simultaneously without re-loading.
  * `nearWindow` controls whether we're actively decoding vs. paused/parked.
  */
-export default function ClipLayer({ slot, globalTime, playing, active, nearWindow, style }: Props) {
+export default function ClipLayer({ slot, globalTime, playing, active, nearWindow, style, globalPreset }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { clip } = slot;
@@ -48,9 +54,21 @@ export default function ClipLayer({ slot, globalTime, playing, active, nearWindo
     volume: clip.voice_volume,
   });
 
-  // Per-clip color overlay chains AFTER the global grade. The Player's
-  // top-level filter wrapper applies the global preset; this layer adds another.
-  const overlayFilter = clip.color_overlay ? colorGradeFilter(clip.color_overlay) : "none";
+  // Strategy A: per-clip + global presets are applied as stacked 3D LUTs in
+  // the WebGL pipeline (LUTVideo). Same .cube files the ffmpeg final render
+  // uses — so the preview matches the export pixel-for-pixel. The CSS
+  // `filter` chain is kept as a fallback for the WebGL-disabled path and for
+  // the still-image branch (no <video>, no shader stage).
+  const clipLutUrl = clip.color_overlay ? lutUrlForPreset(clip.color_overlay) : null;
+  const globalLutUrl = globalPreset ? lutUrlForPreset(globalPreset) : null;
+  const fallbackClipFilter = clip.color_overlay ? colorGradeFilter(clip.color_overlay) : "none";
+  const fallbackGlobalFilter = globalPreset ? colorGradeFilter(globalPreset) : "none";
+  const fallbackFilter = [fallbackClipFilter, fallbackGlobalFilter]
+    .filter((f) => f && f !== "none")
+    .join(" ") || "none";
+  // For the static-image branch (no <video> stage), keep CSS filters so the
+  // image still gets graded in the preview.
+  const stillImageFilter = fallbackFilter === "none" ? undefined : fallbackFilter;
 
   return (
     <div
@@ -59,26 +77,31 @@ export default function ClipLayer({ slot, globalTime, playing, active, nearWindo
         inset: 0,
         overflow: "hidden",
         ...style,
-        filter:
-          overlayFilter !== "none"
-            ? `${overlayFilter}${style?.filter ? ` ${style.filter}` : ""}`
-            : style?.filter,
       }}
     >
       {usingVideo ? (
-        <video
+        <LUTVideo
           ref={videoRef}
           src={clip.clip_url!}
+          lutClipUrl={clipLutUrl}
+          lutGlobalUrl={globalLutUrl}
+          fallbackFilter={fallbackFilter === "none" ? undefined : fallbackFilter}
           muted={!active}
           playsInline
           preload="auto"
-          style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }}
+          style={{ width: "100%", height: "100%" }}
         />
       ) : clip.image_url ? (
         <img
           src={clip.image_url}
           alt=""
-          style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            background: "#000",
+            filter: stillImageFilter,
+          }}
         />
       ) : (
         <div

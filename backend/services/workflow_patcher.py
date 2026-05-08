@@ -439,29 +439,56 @@ def _apply_image_params(wf: dict, params: dict, resolution: tuple[Optional[int],
         wf.pop(slot_id, None)
 
 
-def _apply_image_model(wf: dict, model_name: Optional[str], *, qwen_only: bool = False) -> None:
-    if not model_name:
-        return
-    is_gguf = model_name.lower().endswith(".gguf")
+def _apply_image_model(
+    wf: dict,
+    model_name: Optional[str],
+    *,
+    qwen_only: bool = False,
+    checkpoint_name: Optional[str] = None,
+) -> None:
+    """Route the user-selected model name into the workflow's loader nodes.
+
+    Two slots are supported because scene_image_qwen_edit uses both a Qwen
+    Image Edit UNet (for character-lock reference branch) AND an SDXL base
+    checkpoint (for the actual image generation pass + detailer):
+
+      - ``model_name``: routed by extension. ``.gguf`` → ``UnetLoaderGGUF``,
+        ``.safetensors`` (and friends) → ``CheckpointLoaderSimple`` /
+        ``Efficient Loader 💬ED`` / ``UNETLoader``.
+      - ``checkpoint_name``: explicit SDXL base checkpoint. Always routed to
+        ``CheckpointLoaderSimple`` / ``Efficient Loader 💬ED``. Ignored when
+        ``qwen_only=True`` (sprite generation context where only the Qwen
+        UNet matters).
+
+    In ``qwen_edit`` scene mode, callers should pass the user's Qwen UNet pick
+    as ``model_name`` and the SDXL base pick as ``checkpoint_name`` — that way
+    swapping the base checkpoint (animagineXL → aMix → JAKNU etc.) does NOT
+    accidentally clobber the Qwen UNet slot, and vice versa.
+
+    In ``sdxl`` scene mode, ``model_name`` alone is sufficient and is routed
+    to the checkpoint loaders by extension; ``checkpoint_name`` would be
+    redundant.
+    """
+    is_gguf = bool(model_name and model_name.lower().endswith(".gguf"))
     for node in _iter_nodes(wf):
         cls = node.get("class_type", "")
         inp = node.setdefault("inputs", {})
         if cls == "CheckpointLoaderSimple" and not qwen_only and "ckpt_name" in inp:
-            if is_gguf:
-                continue
-            inp["ckpt_name"] = model_name
+            if checkpoint_name:
+                inp["ckpt_name"] = checkpoint_name
+            elif model_name and not is_gguf:
+                inp["ckpt_name"] = model_name
         elif cls == "Efficient Loader 💬ED" and not qwen_only and "ckpt_name" in inp:
-            if is_gguf:
-                continue
-            inp["ckpt_name"] = model_name
+            if checkpoint_name:
+                inp["ckpt_name"] = checkpoint_name
+            elif model_name and not is_gguf:
+                inp["ckpt_name"] = model_name
         elif cls == "UnetLoaderGGUF" and "unet_name" in inp:
-            if not is_gguf:
-                continue
-            inp["unet_name"] = model_name
+            if model_name and is_gguf:
+                inp["unet_name"] = model_name
         elif cls == "UNETLoader" and "unet_name" in inp:
-            if is_gguf:
-                continue
-            inp["unet_name"] = model_name
+            if model_name and not is_gguf:
+                inp["unet_name"] = model_name
 
 
 def _set_original_image_prompt_nodes(
@@ -714,7 +741,7 @@ def patch_image(
         wf = load_original_workflow(ORIGINAL_WORKFLOWS["scene_image"])
         _set_original_image_prompt_nodes(wf, prompt=prompt, negative_prompt=negative_prompt)
         _apply_image_params(wf, params, resolution)
-        _apply_image_model(wf, image_model)
+        _apply_image_model(wf, image_model, checkpoint_name=params.get("checkpoint"))
         if staged and wf_name == "qwen_edit":
             _inject_qwen_reference_branch_into_original(
                 wf,
@@ -1617,7 +1644,11 @@ def patch_character_sheet(
     )
     _apply_character_sheet_runtime_params(wf, params or {})
     _apply_image_params(wf, params or {}, resolution)
-    _apply_image_model(wf, (params or {}).get("model"))
+    _apply_image_model(
+        wf,
+        (params or {}).get("model"),
+        checkpoint_name=(params or {}).get("checkpoint"),
+    )
     _apply_filename_prefixes(
         wf,
         default_prefix=output_prefix,
@@ -1666,7 +1697,7 @@ def patch_character_sprite_existing(
             inp["upload"] = "image"
 
     _apply_image_params(wf, params, resolution)
-    _apply_image_model(wf, params.get("model"))
+    _apply_image_model(wf, params.get("model"), checkpoint_name=params.get("checkpoint"))
     _apply_filename_prefixes(
         wf,
         default_prefix=output_prefix,

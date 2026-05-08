@@ -29,13 +29,13 @@ if ! command -v git >/dev/null 2>&1; then
     echo "  설치: sudo apt install -y git"
     exit 1
 fi
-echo "=== [0/8] uv: $(uv --version) ==="
+echo "=== [0/9] uv: $(uv --version) ==="
 
 # ═══════════════════════════════════════════════════════════════════
 # PHASE 1: 모델 디렉토리 확보
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [1/8] 모델 디렉토리 확인 ==="
+echo "=== [1/9] 모델 디렉토리 확인 ==="
 mkdir -p ComfyUI/models/{checkpoints,clip,vae,ipadapter,clip_vision,audio_encoders,vfi_models}
 mkdir -p ComfyUI/models/{mmaudio,tts,text_encoders,unet,sams,upscale_models,SEEDVR2}
 mkdir -p ComfyUI/models/fishaudioS2/s2-pro
@@ -59,7 +59,7 @@ echo "  완료"
 # PHASE 2: ComfyUI 커스텀 노드 확보
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [2/8] ComfyUI 커스텀 노드 확인 ==="
+echo "=== [2/9] ComfyUI 커스텀 노드 확인 ==="
 mkdir -p ComfyUI/custom_nodes
 
 ensure_custom_node() {
@@ -117,7 +117,7 @@ echo "  완료"
 # PHASE 3: Python venv (uv)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [3/8] Python 3.11 venv ==="
+echo "=== [3/9] Python 3.11 venv ==="
 if [ ! -d .venv ]; then
     uv venv --python 3.11 .venv
     echo "  생성: .venv"
@@ -131,12 +131,12 @@ source .venv/bin/activate
 # PHASE 4: ComfyUI + 커스텀 노드 파이썬 의존성
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [4/8] ComfyUI 파이썬 의존성 ==="
+echo "=== [4/9] ComfyUI 파이썬 의존성 ==="
 uv pip install --quiet -r ComfyUI/requirements.txt
 echo "  완료"
 
 echo ""
-echo "=== [4b/8] 커스텀 노드 의존성 ==="
+echo "=== [4b/9] 커스텀 노드 의존성 ==="
 for d in ComfyUI/custom_nodes/*/; do
     if [ -f "${d}requirements.txt" ]; then
         name="$(basename "$d")"
@@ -154,7 +154,7 @@ echo "  완료"
 # PHASE 5: sageattention (필수 — O(n) attention, OOM 방지)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [5/8] sageattention (O(n) attention) ==="
+echo "=== [5/9] sageattention (O(n) attention) ==="
 if python -c "from sageattention import sageattn" 2>/dev/null; then
     echo "  [skip] 이미 설치됨"
 else
@@ -166,7 +166,7 @@ fi
 # PHASE 6: 백엔드 파이썬 의존성
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [6/8] 백엔드 의존성 ==="
+echo "=== [6/9] 백엔드 의존성 ==="
 uv pip install --quiet -r backend/requirements.txt
 echo "  완료"
 
@@ -174,7 +174,7 @@ echo "  완료"
 # PHASE 7: 프론트엔드 Node.js 의존성
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [7/8] 프론트엔드 의존성 ==="
+echo "=== [7/9] 프론트엔드 의존성 ==="
 if ! command -v npm >/dev/null 2>&1; then
     echo "  ✗ npm 이 없음. Node.js 20+ 설치 후 재실행."
     echo "    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
@@ -196,7 +196,7 @@ cp workflows/*.json ComfyUI/user/default/workflows/ 2>/dev/null || true
 # PHASE 8: 모델 자동 다운로드 + 검증
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "=== [8/8] 모델 자동 다운로드 및 검증 ==="
+echo "=== [8/9] 모델 자동 다운로드 및 검증 ==="
 if [ "${MYANIFORM_SKIP_MODEL_DOWNLOAD:-0}" = "1" ]; then
     echo "  [skip] MYANIFORM_SKIP_MODEL_DOWNLOAD=1"
 else
@@ -205,6 +205,20 @@ else
     echo ""
     echo "  check_models.sh 실행"
     bash check_models.sh
+fi
+
+# ═══════════════════════════════════════════════════════════════════
+# PHASE 9: 색감 프리셋 3D LUT 베이크
+# ═══════════════════════════════════════════════════════════════════
+# WebGL2 프리뷰와 ffmpeg 최종 렌더가 동일한 .cube 를 참조해야 픽셀 매치된다.
+# 멱등(idempotent) — 매번 다시 구워도 같은 출력이 나오므로 무조건 실행.
+echo ""
+echo "=== [9/9] 색감 프리셋 3D LUT 베이크 ==="
+if [ -f .venv/bin/python ]; then
+    .venv/bin/python scripts/generate_color_luts.py || \
+        echo "  [warn] LUT 베이크 실패 — 색감은 ffmpeg/CSS 폴백으로 동작"
+else
+    echo "  [skip] .venv 가 아직 없음 — phase 6 이후 재실행 필요"
 fi
 
 # ═══════════════════════════════════════════════════════════════════

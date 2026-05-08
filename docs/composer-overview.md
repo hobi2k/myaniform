@@ -11,6 +11,7 @@ myaniform 안에 내장된 영상 편집 엔진. Remotion 같은 외부 의존�
 - **BGM 트랙** — 프로젝트 단위 배경음 업로드, 루프/페이드 in/out.
 - **오버레이 에디터** — Player 위 마우스로 자막/타이틀/스티커 직접 박고 드래그/리사이즈/회전. 5종 진입/이탈 애니.
 - **백엔드 정합 렌더** — 위 모든 편집 데이터가 ffmpeg 최종 mp4 에 그대로 반영.
+- **픽셀-퍼펙트 색감 매치 (Strategy A)** — 색감 프리셋이 33³ 3D LUT(.cube)로 베이크되어 WebGL2 프리뷰와 ffmpeg `lut3d` 가 동일 데이터를 trilinear 샘플링. 편집 화면 ↔ export 결과 색감 차이 없음. 자세히는 `composer-strategyA-done.md`.
 
 ## 진입점
 
@@ -58,8 +59,22 @@ frontend/src/composer/
     OverlayCanvas.tsx       # Player 위 투명 레이어 — 더블클릭 신규/드래그/리사이즈/회전/Delete
     OverlayInspector.tsx    # 오버레이 종류/시간/위치/스타일/애니 풀 편집
 
+  webgl/                    # Strategy A: 색감 프리셋 픽셀-퍼펙트 매치
+    parseCube.ts            # Resolve .cube → Float32Array LUT 데이터
+    lutCache.ts             # /luts/<preset>.cube fetch 캐시
+    lutShaders.ts           # video 2D 텍스처 → 2-stack sampler3D LUT 셰이더
+    LUTVideo.tsx            # <video> + <canvas> WebGL2 렌더, ref forwarding
+
+assets/luts/                # 색감 프리셋 베이크 산출물 (setup phase 9)
+  reference_soft.cube       # ffmpeg `_COLOR_FILTERS` 체인 → 33³ 3D LUT
+  warm_room.cube            # 동일 LUT 가 ffmpeg 와 WebGL 양쪽이 sample → 픽셀 매치
+  clean_neutral.cube
+  dream_blush.cube
+scripts/generate_color_luts.py  # `_COLOR_FILTERS` → .cube 베이크 (멱등, setup 자동 실행)
+
 backend/services/
-  ffmpeg_utils.py           # color_filter_chain (공용), prepare_clip (per-clip 전처리),
+  ffmpeg_utils.py           # color_filter_chain (공용, .cube 우선/eq 폴백),
+                            # prepare_clip (per-clip 전처리),
                             # concat (per-boundary transitions), add_bgm_track, ASS overrides
 
 backend/routers/

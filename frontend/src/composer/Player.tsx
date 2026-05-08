@@ -3,7 +3,7 @@ import { Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward } from "lucide
 import { audioGraph } from "./audio/AudioGraph";
 import ClipLayer from "./ClipLayer";
 import OverlayLayer from "./OverlayLayer";
-import { colorGradeFilter, grainStyle, vignetteStyle } from "./colorGrade";
+import { grainStyle, vignetteStyle } from "./colorGrade";
 import { transitionLayerStyles } from "./transitions";
 import type { ClipSlot, TimelineComposition, PlaybackState } from "./types";
 
@@ -113,9 +113,11 @@ export default function Player({ composition, slots, playback, overlayEditor, as
 
   const activeDialogue = activeSlot?.clip.dialogue ?? null;
 
-  // Color grade is applied as a wrapper filter so it composites all layers
-  // (clips + subtitles + overlays) uniformly.
-  const gradeFilter = colorGradeFilter(composition.settings.color_preset);
+  // Strategy A: color grading is now baked into ClipLayer's WebGL2 LUT
+  // pipeline (per-clip LUT → global LUT). Wrapping the stage in a CSS filter
+  // would double-apply, so we no longer set one here. Vignette/grain still
+  // composite as overlays — same visual order as ffmpeg's finish pass.
+  const globalPreset = composition.settings.color_preset;
 
   // Empty state.
   if (slots.length === 0) {
@@ -136,8 +138,8 @@ export default function Player({ composition, slots, playback, overlayEditor, as
         className="relative w-full"
         style={{ aspectRatio: String(aspect) }}
       >
-        {/* Filter wrapper covers the entire stage uniformly. */}
-        <div style={{ position: "absolute", inset: 0, filter: gradeFilter }}>
+        {/* Each ClipLayer applies clip+global 3D LUTs internally. */}
+        <div style={{ position: "absolute", inset: 0 }}>
           {/* Outgoing clip (lower z) */}
           {outgoingSlot && (
             <ClipLayer
@@ -147,6 +149,7 @@ export default function Player({ composition, slots, playback, overlayEditor, as
               active={false /* outgoing is muted; active layer drives audio */}
               nearWindow
               style={tStyles.outgoing}
+              globalPreset={globalPreset}
             />
           )}
 
@@ -158,6 +161,7 @@ export default function Player({ composition, slots, playback, overlayEditor, as
             active
             nearWindow
             style={tStyles.active}
+            globalPreset={globalPreset}
           />
 
           {/* Preload neighbors (mounted but not visible). Browsers will warm up
@@ -176,6 +180,7 @@ export default function Player({ composition, slots, playback, overlayEditor, as
                 active={false}
                 nearWindow
                 style={{ opacity: 0, pointerEvents: "none" }}
+                globalPreset={globalPreset}
               />
             );
           })}
