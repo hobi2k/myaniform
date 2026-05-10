@@ -48,13 +48,28 @@ export interface Character {
   sprite_params: string | null;
   image_path: string | null;
   sprite_path: string | null;  // VNCCS 스프라이트 (Phase 4)
+  /** voice_source — 캐릭터 음성을 어떻게 마련했는지의 라벨.
+   *  "design" / "upload" 면 voice_sample_path 가 채워짐. "customvoice_preset"
+   *  은 voice_preset_speaker, "voicebox_path" 는 voicebox_checkpoint+speaker
+   *  를 사용. 씬 인스펙터의 모드 picker 가 이 값으로 기본값을 결정. */
+  voice_source: VoiceSource | null;
   voice_design: string | null;
   voice_sample_path: string | null;
   voice_sample_text: string | null;
   voice_language: string | null;
   voice_params: string | null;
+  voice_preset_speaker: string | null;
+  voicebox_checkpoint: string | null;
+  voicebox_speaker: string | null;
   tts_engine: TTSEngine;
 }
+
+/** 캐릭터 baseline 음성을 어떻게 마련했는지의 라벨. 모두 voice_sample_path
+ *  (WAV) 를 결과로 만든다 — 이후 voicebox_speaker 가 등록되면 영구 named
+ *  speaker 로 호출되고, 없으면 WAV 클론으로 fallback.
+ *  legacy 값 ("customvoice_preset", "voicebox_path") 도 DB 에는 남아 있을 수
+ *  있으나 더 이상 쓰지 않음 — UI 는 design/upload 만 노출. */
+export type VoiceSource = "design" | "upload";
 
 export interface LoraSelection {
   name: string;
@@ -113,16 +128,16 @@ export interface ImageParams {
  * Other fields are mode-specific; backend builders read what they need and
  * ignore the rest, so the editor can keep all knobs in one flat object.
  */
+/** Scene-level modes only. Voice *creation* (design / directed clone) lives
+ *  on the character inspector; scenes always consume the character's
+ *  prepared voice (sample WAV, preset speaker, or voicebox checkpoint). */
 export type VoiceMode =
-  | "qwen3_voice_design"
-  | "qwen3_custom_voice"
-  | "qwen3_voice_clone"
   | "qwen3_base_custom_voice_clone_instruct"
-  | "qwen3_directed_clone_from_voice_design"
+  | "qwen3_voice_clone"
   | "qwen3_hybrid_clone_instruct_preset"
-  | "qwen3_voicebox_instruct"
+  | "qwen3_custom_voice"
   | "qwen3_voicebox_clone_instruct"
-  | "s2pro_voice_design"
+  | "qwen3_voicebox_instruct"
   | "s2pro_voice_clone";
 
 export const QWEN3_CUSTOM_VOICE_SPEAKERS = [
@@ -136,78 +151,59 @@ export const VOICE_MODE_OPTIONS: ReadonlyArray<{
   family: "qwen3_native" | "qwen3_voicebox" | "s2pro";
   needsRefAudio: boolean;
   needsSpeakerPreset: boolean;
+  /** Always false at scene level — kept on the type for compatibility with
+   *  the editor component that reads it. */
   needsDesignText: boolean;
   description: string;
 }> = [
   {
-    id: "qwen3_voice_design",
-    label: "Voice Design (텍스트 묘사)",
+    id: "qwen3_base_custom_voice_clone_instruct",
+    label: "Clone + Instruct (Base + CustomVoice · 풀 옵션)",
     family: "qwen3_native",
-    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: true,
-    description: "레퍼런스 음성 없이 instruct 만으로 음색 합성.",
-  },
-  {
-    id: "qwen3_custom_voice",
-    label: "Custom Voice (프리셋 화자 + instruct)",
-    family: "qwen3_native",
-    needsRefAudio: false, needsSpeakerPreset: true, needsDesignText: false,
-    description: "Vivian/Serena/Sohee 등 9개 빌트인 화자 선택, instruct 로 톤 조절.",
+    needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
+    description: "기본값. 캐릭터 음성 샘플을 클론 + instruct 로 톤/감정 지시. x_vector_only_mode 까지 켤 수 있는 풀 파워.",
   },
   {
     id: "qwen3_voice_clone",
-    label: "Voice Clone (레퍼런스 음성)",
+    label: "Clone only (가벼움)",
     family: "qwen3_native",
     needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
-    description: "캐릭터 보이스 샘플 한 개로 클론. ref_text 주면 더 정확.",
-  },
-  {
-    id: "qwen3_base_custom_voice_clone_instruct",
-    label: "Base + CustomVoice · Clone + Instruct",
-    family: "qwen3_native",
-    needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
-    description: "Base + CustomVoice 두 모델 + 클론 + instruct + (옵션) x_vector_only_mode 풀 옵션.",
-  },
-  {
-    id: "qwen3_directed_clone_from_voice_design",
-    label: "Directed Clone from Voice Design (3-model)",
-    family: "qwen3_native",
-    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: true,
-    description: "VoiceDesign + Base + CustomVoice 3-model. instruct 만으로 시드 보이스 → 클론 — ref 불필요.",
+    description: "instruct 없이 캐릭터 보이스 샘플을 그대로 클론. 가장 빠름.",
   },
   {
     id: "qwen3_hybrid_clone_instruct_preset",
-    label: "Hybrid Clone + Instruct + Preset (auto-anchor)",
+    label: "Hybrid (auto-anchor)",
     family: "qwen3_native",
     needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: false,
-    description: "ref / 프리셋 화자 / 저장된 prompt 중 가용한 것을 자동 선택 — 가장 유연.",
+    description: "ref audio / 빌트인 화자 / 저장된 prompt 중 가능한 것을 자동 선택. 가장 유연.",
   },
   {
-    id: "qwen3_voicebox_instruct",
-    label: "VoiceBox + Instruct (named speaker)",
-    family: "qwen3_voicebox",
+    id: "qwen3_custom_voice",
+    label: "Built-in Speaker (Vivian / Sohee 등)",
+    family: "qwen3_native",
     needsRefAudio: false, needsSpeakerPreset: true, needsDesignText: false,
-    description: "사전학습 voicebox 의 named speaker(예: 'mai') + instruct.",
+    description: "캐릭터 음성 대신 Qwen3 빌트인 화자 9종 중 하나. 캐릭터가 customvoice_preset 으로 등록된 경우 자동.",
   },
   {
     id: "qwen3_voicebox_clone_instruct",
     label: "VoiceBox · Clone + Instruct",
     family: "qwen3_voicebox",
     needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
-    description: "Voicebox 모델로 ref audio 클론 + instruct. strategy 선택 가능.",
+    description: "VoiceBox 추론 strategy 로 ref audio 클론 + instruct. embedded_encoder_with_ref_code 가 가장 안정.",
   },
   {
-    id: "s2pro_voice_design",
-    label: "S2 Pro · Voice Design",
-    family: "s2pro",
-    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: true,
-    description: "Fish S2-Pro 텍스트 기반 voice design.",
+    id: "qwen3_voicebox_instruct",
+    label: "VoiceBox · Named Speaker (사전 등록)",
+    family: "qwen3_voicebox",
+    needsRefAudio: false, needsSpeakerPreset: true, needsDesignText: false,
+    description: "VoiceBox 체크포인트 안에 등록된 named speaker(예: 'mai') 호출. 캐릭터에 voicebox 등록이 되어 있어야 의미가 있음.",
   },
   {
     id: "s2pro_voice_clone",
-    label: "S2 Pro · Voice Clone",
+    label: "Fish S2-Pro · Voice Clone",
     family: "s2pro",
     needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
-    description: "Fish S2-Pro 의 zero-shot 보이스 클론.",
+    description: "Fish S2-Pro 의 zero-shot 보이스 클론. 캐릭터 tts_engine 이 s2pro 일 때 권장.",
   },
 ];
 

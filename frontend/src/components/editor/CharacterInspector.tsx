@@ -5,7 +5,7 @@ import { api } from "../../api";
 import { DEFAULT_IMAGE_PARAMS } from "../../constants/modelCatalog";
 import { useGenerationStream } from "../../hooks/useGenerationStream";
 import { parseJson } from "../../lib/json";
-import type { Character, ImageParams, VoiceGenParams } from "../../types";
+import type { Character, ImageParams, VoiceGenParams, VoiceSource } from "../../types";
 import ImageParamsEditor from "../shared/ImageParamsEditor";
 import MiniTabs from "../shared/MiniTabs";
 import StepCard, { type StepState } from "../shared/StepCard";
@@ -51,13 +51,19 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
   const [voiceSampleText, setVoiceSampleText] = useState(character.voice_sample_text ?? "안녕하세요.");
   const [voiceLanguage, setVoiceLanguage] = useState(character.voice_language ?? "Korean");
   const [voiceParams, setVoiceParams] = useState<VoiceGenParams>(parseJson<VoiceGenParams>(character.voice_params, {}));
+  const [timbreStrength, setTimbreStrength] = useState<number>(0.72);
+  const [anchorSpeaker, setAnchorSpeaker] = useState<string>("auto");
 
   const [openStep, setOpenStep] = useState<number | null>(0);
   const [spriteMode, setSpriteMode] = useState<"new" | "reference">(
     character.image_path && !character.image_path.includes("_generated") ? "reference" : "new",
   );
-  const [voiceMode, setVoiceMode] = useState<"design" | "upload">(
-    character.tts_engine === "s2pro" && !character.voice_design ? "upload" : "design",
+  const [voiceMode, setVoiceMode] = useState<VoiceSource>(
+    (character.voice_source === "upload" || character.voice_source === "design")
+      ? character.voice_source
+      : (character.voice_sample_path
+          ? (character.tts_engine === "s2pro" && !character.voice_design ? "upload" : "design")
+          : "design"),
   );
   const { task, run } = useGenerationStream<Character>();
 
@@ -86,7 +92,13 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
     setVoiceLanguage(character.voice_language ?? "Korean");
     setVoiceParams(parseJson<VoiceGenParams>(character.voice_params, {}));
     setSpriteMode(character.image_path && !character.image_path.includes("_generated") ? "reference" : "new");
-    setVoiceMode(character.tts_engine === "s2pro" && !character.voice_design ? "upload" : "design");
+    setVoiceMode(
+      (character.voice_source === "upload" || character.voice_source === "design")
+        ? character.voice_source
+        : (character.voice_sample_path
+            ? (character.tts_engine === "s2pro" && !character.voice_design ? "upload" : "design")
+            : "design"),
+    );
   }, [character.id]);
 
   const persistAll = () =>
@@ -113,6 +125,7 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
       voice_language: voiceLanguage,
       voice_params: JSON.stringify(voiceParams),
       voice_design: voiceDesign,
+      voice_source: voiceMode,
     });
 
   const saveSettings = useMutation({
@@ -139,6 +152,19 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
     mutationFn: (file: File) => api.characters.uploadVoice(projectId, character.id, file),
     onSuccess: onUpdated,
   });
+
+  const startVoiceboxRegister = () =>
+    run({
+      kind: "voice",
+      label: "VoiceBox 화자 등록 (영구 음색 baking)",
+      url: `/api/projects/${projectId}/characters/${character.id}/voice/voicebox/register/stream`,
+      body: { timbre_strength: timbreStrength, anchor_speaker: anchorSpeaker },
+      payloadField: "character",
+      beforeStart: async () => {
+        await persistAll();
+      },
+      onComplete: onUpdated,
+    });
 
   const startSprite = (mode: "new" | "reference") =>
     run({
@@ -187,8 +213,14 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
     busy && task.kind === "sprite" ? "running" : hasSprite ? "done" : desc.trim() ? "ready" : "blocked";
   const imageState: StepState =
     busy && task.kind === "image" ? "running" : hasImage ? "done" : hasSprite ? "ready" : "blocked";
+  const hasVoiceSample = !!character.voice_sample_path;
+  const voiceboxRegistered = !!(character.voicebox_checkpoint && character.voicebox_speaker);
   const voiceState: StepState =
-    busy && task.kind === "voice" ? "running" : character.voice_sample_path ? "done" : voiceDesign.trim() ? "ready" : "todo";
+    busy && task.kind === "voice"
+      ? "running"
+      : hasVoiceSample
+        ? "done"  // baseline 확보됨. 등록은 선택 — done 으로 침.
+        : (voiceMode === "design" && voiceDesign.trim()) ? "ready" : "todo";
 
   return (
     <div className="p-3 space-y-3">
@@ -453,11 +485,15 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
         index={3}
         title="음성"
         subtitle={
-          character.voice_sample_path
-            ? "보이스 샘플 준비됨"
+          hasVoiceSample
+            ? voiceboxRegistered
+              ? `Baseline + 모델 등록 완료 (${character.voicebox_speaker})`
+              : voiceMode === "design"
+                ? "Voice Design WAV 준비됨 — 모델 등록 권장"
+                : "WAV 업로드됨 — 모델 등록 권장"
             : voiceMode === "design"
-              ? "Voice Design (Qwen3): 텍스트 묘사로 생성"
-              : "WAV 업로드: 외부 음성을 cloning 레퍼런스로 사용"
+              ? "Voice Design: 텍스트 묘사로 baseline WAV 생성"
+              : "WAV 업로드: 외부 음성을 baseline 으로"
         }
         state={voiceState}
         open={openStep === 3}
@@ -467,14 +503,14 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
             <Button
               size="sm"
               variant="primary"
-              loading={busy && task.kind === "voice"}
+              loading={busy && task.kind === "voice" && !hasVoiceSample}
               disabled={busy || !voiceDesign.trim()}
               onClick={(e) => {
                 e.stopPropagation();
                 startVoice();
               }}
             >
-              <Mic className="w-3 h-3" /> 생성
+              <Mic className="w-3 h-3" /> {hasVoiceSample ? "재생성" : "생성"}
             </Button>
           ) : (
             <Button
@@ -503,13 +539,17 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
             e.target.value = "";
           }}
         />
-        <MiniTabs<"design" | "upload">
+        <p className="text-[11px] text-gray-400 mb-2">
+          1) <span className="text-accent">baseline WAV</span> 를 만들고 → 2) <span className="text-accent">"모델에 영구 등록"</span> 버튼으로 그 음색을 Qwen3 모델 ckpt 안에 named speaker 로 굽습니다 (`Qwen3VoiceBoxMorphSpeaker`).
+          등록 후에는 씬 합성이 ref 없이 이름만으로 호출되어 일관된 음색 + 빠른 합성이 됩니다.
+        </p>
+        <MiniTabs<VoiceSource>
           value={voiceMode}
           onChange={(mode) => {
             setVoiceMode(mode);
-            // 모드가 곧 씬 대사 합성 엔진 — 디자인은 Qwen3, 업로드는 S2 Pro 가 기본 페어링.
-            // 씬 단위로 다른 엔진을 쓰고 싶으면 씬 인스펙터에서 오버라이드.
-            const tts_engine: "qwen3" | "s2pro" = mode === "design" ? "qwen3" : "s2pro";
+            // tts_engine 페어링: design 은 Qwen3, upload 는 S2-Pro 기본.
+            // 씬 단위로 오버라이드 가능. voicebox 등록되면 Qwen3 만 의미 있음.
+            const tts_engine: "qwen3" | "s2pro" = mode === "upload" ? "s2pro" : "qwen3";
             if (tts_engine !== character.tts_engine) {
               api.characters
                 .update(projectId, character.id, { tts_engine })
@@ -517,17 +557,13 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
             }
           }}
           tabs={[
-            { value: "design", label: "Voice Design — Qwen3", hint: "텍스트 묘사 → 새 보이스 샘플. 씬 합성도 Qwen3" },
-            { value: "upload", label: "WAV 업로드 — S2 Pro", hint: "외부 음성 파일을 cloning 레퍼런스로. 씬 합성은 S2 Pro" },
+            { value: "design", label: "Voice Design", hint: "텍스트 묘사 → Qwen3 가 baseline WAV 합성" },
+            { value: "upload", label: "WAV 업로드", hint: "외부 음성 파일을 baseline 으로 사용" },
           ]}
         />
 
-        {voiceMode === "design" ? (
-          <div className="space-y-3">
-            <p className="text-[11px] text-gray-400">
-              텍스트 묘사로 새 보이스 샘플을 만듭니다 (`Qwen3DirectedCloneFromVoiceDesign` 워크플로우).
-              생성된 WAV 는 자동으로 캐릭터 보이스 샘플로 등록되어 씬 대사 합성 시 cloning 레퍼런스로 쓰입니다.
-            </p>
+        {voiceMode === "design" && (
+          <div className="space-y-3 mt-2">
             <textarea
               className="input-base w-full resize-none h-14"
               placeholder="calm Korean female voice, warm, gentle, 30s housewife"
@@ -560,23 +596,77 @@ export default function CharacterInspector({ projectId, character, onUpdated }: 
             </div>
             <details className="rounded-lg border border-white/5 bg-black/10 p-2">
               <summary className="text-[11px] text-gray-400 font-semibold cursor-pointer flex items-center gap-1.5">
-                <Settings2 className="w-3 h-3" /> 보이스 파라미터
+                <Settings2 className="w-3 h-3" /> 보이스 생성 파라미터
               </summary>
               <div className="mt-2">
                 <VoiceParamsEditor value={voiceParams} onChange={setVoiceParams} />
               </div>
             </details>
           </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-[11px] text-gray-400">
-              외부 보이스 파일을 업로드해 cloning 레퍼런스로 등록합니다. 씬 대사 합성은 <span className="text-accent">Fish S2 Pro</span> 로 진행.
-            </p>
-            <p className="text-[10px] text-gray-500">
-              지원 포맷: WAV, MP3, FLAC 등. 5~30초 분량 권장. 씬별로 다른 엔진을 쓰고 싶으면 씬 인스펙터에서 오버라이드 가능.
-            </p>
+        )}
+
+        {voiceMode === "upload" && (
+          <div className="space-y-2 mt-2">
+            <p className="text-[10px] text-gray-500">지원 포맷: WAV / MP3 / FLAC. 5~30초 분량 권장. 업로드된 음원은 그대로 baseline 이 됩니다.</p>
           </div>
         )}
+
+        {/* ── 모델 영구 등록 (morph) ────────────────────────────────────── */}
+        <div className={`rounded-lg border p-2 mt-3 ${voiceboxRegistered ? "border-accent/40 bg-accent/5" : "border-white/10 bg-black/20"}`}>
+          <div className="flex items-center gap-2">
+            <Mic className="w-3.5 h-3.5 text-accent shrink-0" />
+            <div className="text-[11px] text-gray-300 font-semibold flex-1">
+              {voiceboxRegistered ? "모델에 영구 등록됨" : "모델에 영구 등록 (선택 · 권장)"}
+            </div>
+            <Button
+              size="sm"
+              variant={voiceboxRegistered ? "secondary" : "primary"}
+              loading={busy && task.kind === "voice" && hasVoiceSample}
+              disabled={busy || !hasVoiceSample}
+              onClick={() => startVoiceboxRegister()}
+            >
+              {voiceboxRegistered ? "재등록" : "등록"}
+            </Button>
+          </div>
+          <p className="text-[10px] text-gray-500 mt-1">
+            baseline WAV 의 speaker embedding 을 anchor 화자와 보간 후 모델 ckpt 의 빈 슬롯에 한 행 써서 named speaker 로 굽습니다 (`Qwen3VoiceBoxMorphSpeaker`).
+            이후 씬 인스펙터의 <span className="text-accent">VoiceBox · Named Speaker</span> 모드가 ref audio 없이 이름만으로 즉시 합성합니다.
+          </p>
+          {voiceboxRegistered && (
+            <p className="text-[10px] text-gray-500 mt-1">
+              speaker = <span className="text-gray-300">{character.voicebox_speaker}</span> · ckpt = <span className="text-gray-400 break-all">{character.voicebox_checkpoint}</span>
+            </p>
+          )}
+          {!hasVoiceSample && (
+            <p className="text-[10px] text-amber-300 mt-1">먼저 baseline WAV 를 준비해야 등록할 수 있습니다.</p>
+          )}
+          <details className="mt-2">
+            <summary className="text-[10px] text-gray-500 cursor-pointer">고급 옵션 (timbre_strength / anchor)</summary>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <div>
+                <label className="text-[10px] text-gray-500 block">timbre_strength (0=anchor, 1=ref)</label>
+                <input
+                  type="number" min={0} max={1} step={0.01}
+                  className="input-base w-full"
+                  value={timbreStrength}
+                  onChange={(e) => setTimbreStrength(parseFloat(e.target.value))}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 block">anchor_speaker</label>
+                <input
+                  className="input-base w-full"
+                  placeholder="auto"
+                  value={anchorSpeaker}
+                  onChange={(e) => setAnchorSpeaker(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">
+              0.72 가 기본. 너무 낮으면 anchor 화자 톤이 묻어나고, 너무 높으면 ref audio 노이즈까지 따라옵니다. anchor 는 언어별 적합한 빌트인 화자로 자동 선택.
+            </p>
+          </details>
+        </div>
       </StepCard>
 
       <TaskProgress task={task} />

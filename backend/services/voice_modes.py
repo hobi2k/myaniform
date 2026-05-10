@@ -52,96 +52,72 @@ class VoiceModeSpec:
     description: str
 
 
+# Scene-level catalog. Modes that *create* a fresh voice (voice_design,
+# directed_clone) belong on the character inspector, not here — once the
+# character has a voice_sample_path, scenes just consume it.
 VOICE_MODE_CATALOG: list[VoiceModeSpec] = [
     VoiceModeSpec(
-        id="qwen3_voice_design",
-        label="Voice Design (텍스트 묘사로 합성)",
+        id="qwen3_base_custom_voice_clone_instruct",
+        label="Clone + Instruct (Base + CustomVoice · 풀 옵션)",
         family="qwen3_native",
-        needs_ref_audio=False,
+        needs_ref_audio=True,
         needs_speaker_preset=False,
-        needs_design_text=True,
-        description="레퍼런스 음성 없이 instruct 텍스트(예: 'warm intimate Korean female') 만으로 합성.",
-    ),
-    VoiceModeSpec(
-        id="qwen3_custom_voice",
-        label="Custom Voice (프리셋 화자 + instruct)",
-        family="qwen3_native",
-        needs_ref_audio=False,
-        needs_speaker_preset=True,
         needs_design_text=False,
-        description="Vivian/Serena/Sohee 등 9개 빌트인 화자 중 선택, instruct 로 톤 조절.",
+        description="기본값. 캐릭터 음성 샘플을 클론 + instruct 로 톤/감정 지시. x_vector_only_mode 까지 켤 수 있는 풀 파워 모드.",
     ),
     VoiceModeSpec(
         id="qwen3_voice_clone",
-        label="Voice Clone (레퍼런스 음성)",
+        label="Clone only (가벼움)",
         family="qwen3_native",
         needs_ref_audio=True,
         needs_speaker_preset=False,
         needs_design_text=False,
-        description="캐릭터 보이스 샘플 한 개로 클론. ref_text 주면 더 정확.",
-    ),
-    VoiceModeSpec(
-        id="qwen3_base_custom_voice_clone_instruct",
-        label="Base + CustomVoice Clone + Instruct",
-        family="qwen3_native",
-        needs_ref_audio=True,
-        needs_speaker_preset=False,
-        needs_design_text=False,
-        description="Base + CustomVoice 두 모델 동시 사용. 클론 + instruct + (옵션) x_vector_only_mode 까지 모두 켤 수 있는 풀 옵션.",
-    ),
-    VoiceModeSpec(
-        id="qwen3_directed_clone_from_voice_design",
-        label="Directed Clone from Voice Design (3-model)",
-        family="qwen3_native",
-        needs_ref_audio=False,
-        needs_speaker_preset=False,
-        needs_design_text=True,
-        description="VoiceDesign + Base + CustomVoice 세 모델 체인. 디자인 instruct 로 시드 보이스 만들고 그것을 그대로 클론 — 레퍼런스 오디오 불필요.",
+        description="instruct 없이 캐릭터 보이스 샘플을 그대로 클론. 가장 빠름.",
     ),
     VoiceModeSpec(
         id="qwen3_hybrid_clone_instruct_preset",
-        label="Hybrid Clone + Instruct + Preset (auto-anchor)",
+        label="Hybrid (auto-anchor)",
         family="qwen3_native",
-        needs_ref_audio=False,  # optional
+        needs_ref_audio=False,
         needs_speaker_preset=False,
         needs_design_text=False,
-        description="레퍼런스/프리셋 화자/저장된 prompt 중 사용 가능한 것을 자동 선택. 가장 유연.",
+        description="ref audio / 빌트인 화자 / 저장된 prompt 중 가능한 것을 자동 선택 — 캐릭터가 voice_sample 없이 빌트인 화자만 가진 경우에도 동작.",
+    ),
+    VoiceModeSpec(
+        id="qwen3_custom_voice",
+        label="Built-in Speaker (Vivian / Sohee 등)",
+        family="qwen3_native",
+        needs_ref_audio=False,
+        needs_speaker_preset=True,
+        needs_design_text=False,
+        description="캐릭터 음성 대신 Qwen3 빌트인 화자 9종 중 하나를 사용. 캐릭터가 빌트인 화자로 등록된 경우 자동 선택.",
+    ),
+    VoiceModeSpec(
+        id="qwen3_voicebox_clone_instruct",
+        label="VoiceBox · Clone + Instruct",
+        family="qwen3_voicebox",
+        needs_ref_audio=True,
+        needs_speaker_preset=False,
+        needs_design_text=False,
+        description="VoiceBox 추론 strategy 로 ref audio 클론 + instruct. embedded_encoder_with_ref_code 가 가장 안정.",
     ),
     VoiceModeSpec(
         id="qwen3_voicebox_instruct",
-        label="VoiceBox + Instruct (named speaker)",
+        label="VoiceBox · Named Speaker (사전 등록)",
         family="qwen3_voicebox",
         needs_ref_audio=False,
         needs_speaker_preset=True,
         needs_design_text=False,
-        description="사전 학습된 voicebox 안의 named speaker(예: 'mai') + instruct. 화자 이름 직접 입력.",
-    ),
-    VoiceModeSpec(
-        id="qwen3_voicebox_clone_instruct",
-        label="VoiceBox Clone + Instruct",
-        family="qwen3_voicebox",
-        needs_ref_audio=True,
-        needs_speaker_preset=False,
-        needs_design_text=False,
-        description="Voicebox 모델로 ref audio 클론 + instruct 동시. strategy 선택 가능.",
-    ),
-    VoiceModeSpec(
-        id="s2pro_voice_design",
-        label="S2 Pro · Voice Design",
-        family="s2pro",
-        needs_ref_audio=False,
-        needs_speaker_preset=False,
-        needs_design_text=True,
-        description="Fish S2-Pro 의 텍스트 기반 voice design.",
+        description="VoiceBox 체크포인트 안에 등록된 named speaker(예: 'mai') 호출. 캐릭터에 voicebox 등록이 되어 있어야 의미가 있음.",
     ),
     VoiceModeSpec(
         id="s2pro_voice_clone",
-        label="S2 Pro · Voice Clone",
+        label="Fish S2-Pro · Voice Clone",
         family="s2pro",
         needs_ref_audio=True,
         needs_speaker_preset=False,
         needs_design_text=False,
-        description="Fish S2-Pro 의 zero-shot 보이스 클론.",
+        description="Fish S2-Pro 의 zero-shot 보이스 클론. 캐릭터 tts_engine 이 s2pro 일 때 권장.",
     ),
 ]
 
@@ -151,7 +127,19 @@ VOICE_MODE_INDEX = {spec.id: spec for spec in VOICE_MODE_CATALOG}
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _loader(repo_id: str, *, attention: str = DEFAULT_ATTENTION, precision: str = DEFAULT_PRECISION) -> dict:
+def _loader(
+    repo_id: str,
+    *,
+    attention: str = DEFAULT_ATTENTION,
+    precision: str = DEFAULT_PRECISION,
+    local_model_path: str = "",
+) -> dict:
+    """Qwen3Loader. ``local_model_path`` 가 지정되면 해당 디렉터리에서 로드 —
+    voicebox 등록된 캐릭터 ckpt 를 가리킬 때 사용."""
+    title_suffix = (
+        f" (local: …/{local_model_path.rstrip('/').split('/')[-1]})"
+        if local_model_path else ""
+    )
     return {
         "class_type": "Qwen3Loader",
         "inputs": {
@@ -159,9 +147,9 @@ def _loader(repo_id: str, *, attention: str = DEFAULT_ATTENTION, precision: str 
             "source": "HuggingFace",
             "precision": precision,
             "attention": attention,
-            "local_model_path": "",
+            "local_model_path": local_model_path,
         },
-        "_meta": {"title": f"Loader · {repo_id.split('/')[-1]}"},
+        "_meta": {"title": f"Loader · {repo_id.split('/')[-1]}{title_suffix}"},
     }
 
 
@@ -232,10 +220,12 @@ def _build_qwen3_voice_design(text: str, ref: Optional[str], p: dict, prefix: st
 
 
 def _build_qwen3_custom_voice(text: str, ref: Optional[str], p: dict, prefix: str) -> dict:
-    """Built-in speaker + optional instruct."""
+    """Built-in speaker + optional instruct.
+    voicebox_checkpoint 가 들어오면 등록된 캐릭터 화자도 같은 ckpt 안에서 호출 가능."""
     common = _common_qwen3_kwargs(p)
+    ckpt = (p.get("voicebox_checkpoint") or "").strip()
     return {
-        "1": _loader(REPO_CUSTOM_VOICE),
+        "1": _loader(REPO_CUSTOM_VOICE, local_model_path=ckpt),
         "2": {
             "class_type": "Qwen3CustomVoice",
             "inputs": {
@@ -315,7 +305,8 @@ def _build_qwen3_base_cv_clone_instruct(text: str, ref: Optional[str], p: dict, 
             },
             "_meta": {"title": "Base + CustomVoice · Clone + Instruct"},
         },
-        "5": _save_audio(["4", 0], prefix=prefix),
+        # Qwen3BaseCustomVoiceCloneInstruct outputs (clone_prompt=0, audio=1).
+        "5": _save_audio(["4", 1], prefix=prefix),
     }
 
 
@@ -346,14 +337,16 @@ def _build_qwen3_hybrid(text: str, ref: Optional[str], p: dict, prefix: str) -> 
         "inputs": inputs,
         "_meta": {"title": "Hybrid Clone + Instruct (auto-anchor)"},
     }
-    nodes["5"] = _save_audio(["4", 0], prefix=prefix)
+    # Outputs: clone_prompt=0, audio=1, strategy=2, anchor_speaker=3.
+    nodes["5"] = _save_audio(["4", 1], prefix=prefix)
     return nodes
 
 
 def _build_qwen3_voicebox_instruct(text: str, ref: Optional[str], p: dict, prefix: str) -> dict:
     common = _common_qwen3_kwargs(p)
+    ckpt = (p.get("voicebox_checkpoint") or "").strip()
     return {
-        "1": _loader(REPO_CUSTOM_VOICE),
+        "1": _loader(REPO_CUSTOM_VOICE, local_model_path=ckpt),
         "2": {
             "class_type": "Qwen3VoiceBoxInstruct",
             "inputs": {
@@ -389,7 +382,8 @@ def _build_qwen3_voicebox_clone_instruct(text: str, ref: Optional[str], p: dict,
         "non_streaming_mode": bool(p.get("non_streaming_mode", False)),
         "ref_text": p.get("ref_text", ""),
     }
-    nodes: dict = {"1": _loader(REPO_CUSTOM_VOICE)}
+    ckpt = (p.get("voicebox_checkpoint") or "").strip()
+    nodes: dict = {"1": _loader(REPO_CUSTOM_VOICE, local_model_path=ckpt)}
     if ref:
         nodes["2"] = _load_audio(ref)
         inputs["ref_audio"] = ["2", 0]
@@ -411,22 +405,35 @@ def _legacy_s2pro(text: str, ref: Optional[str], p: dict, prefix: str) -> None:
 VoiceModeBuilder = Callable[[str, Optional[str], dict, str], Optional[dict]]
 
 VOICE_MODE_BUILDERS: dict[VoiceMode, VoiceModeBuilder] = {
-    "qwen3_voice_design": _build_qwen3_voice_design,
     "qwen3_custom_voice": _build_qwen3_custom_voice,
     "qwen3_voice_clone": _build_qwen3_voice_clone,
     "qwen3_base_custom_voice_clone_instruct": _build_qwen3_base_cv_clone_instruct,
-    "qwen3_directed_clone_from_voice_design": _build_qwen3_voice_design,  # alias
     "qwen3_hybrid_clone_instruct_preset": _build_qwen3_hybrid,
     "qwen3_voicebox_instruct": _build_qwen3_voicebox_instruct,
     "qwen3_voicebox_clone_instruct": _build_qwen3_voicebox_clone_instruct,
-    "s2pro_voice_design": _legacy_s2pro,
     "s2pro_voice_clone": _legacy_s2pro,
+    # Character-only voice creation modes — kept here so that
+    # ``patch_voice_design`` / character voicebox registration can re-use the
+    # same dispatch logic without duplicating wiring. They should NOT be
+    # surfaced in the scene-level mode picker.
+    "qwen3_voice_design": _build_qwen3_voice_design,
+    "qwen3_directed_clone_from_voice_design": _build_qwen3_voice_design,  # alias
 }
 
 
 def infer_default_mode(tts_engine: str, has_ref_audio: bool) -> VoiceMode:
-    """Pick a sensible default mode for callers that didn't set one (legacy DB rows)."""
+    """Pick a sensible default scene-level mode for legacy rows.
+
+    Scenes always consume a character's pre-prepared voice — so we never
+    default to a *creation* mode (voice_design). If the character has no
+    sample at all we fall back to hybrid (which can still synthesize via
+    instruct / built-in anchor).
+    """
     engine = (tts_engine or "qwen3").lower()
     if engine == "s2pro":
-        return "s2pro_voice_clone" if has_ref_audio else "s2pro_voice_design"
-    return "qwen3_voice_clone" if has_ref_audio else "qwen3_voice_design"
+        # No s2pro_voice_design at scene level — if no ref audio, hybrid
+        # qwen3 path is still better than failing.
+        return "s2pro_voice_clone" if has_ref_audio else "qwen3_hybrid_clone_instruct_preset"
+    if has_ref_audio:
+        return "qwen3_base_custom_voice_clone_instruct"
+    return "qwen3_hybrid_clone_instruct_preset"

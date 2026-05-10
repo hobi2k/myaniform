@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from "react";
+import { Mic } from "lucide-react";
 import {
   QWEN3_CUSTOM_VOICE_SPEAKERS,
   VOICE_MODE_OPTIONS,
+  type Character,
   type VoiceMode,
   type VoiceParams,
 } from "../../types";
@@ -24,38 +26,34 @@ interface Props {
   /** Voice generation parameters (JSON-serialized in `Scene.voice_params`). */
   value: VoiceParams;
   onChange: (next: VoiceParams) => void;
-  /** Whether the selected character has a voice sample uploaded — drives a
-   *  warning when the chosen mode requires ref audio but none is available. */
-  hasReferenceAudio: boolean;
-  /** Default mode picked when value.mode is empty (legacy migration). */
-  defaultMode?: VoiceMode;
+  /** The character whose prepared voice will be the source for this scene.
+   *  Used to (a) render the source banner and (b) pre-fill speaker / voicebox
+   *  fields when the chosen mode needs them. */
+  character: Character | null;
 }
 
 /**
- * Inspector for the rich Qwen3-TTS / S2-Pro mode catalog (per-scene).
+ * Inspector for *consuming* a character's prepared voice in a scene. The
+ * character has already done the voice creation work (design / upload /
+ * preset / voicebox); this editor only chooses HOW to use that source for
+ * the scene's dialogue line.
  *
- * Renders one mode dropdown plus a mode-aware parameter form. Fields the
- * current mode doesn't touch are hidden so the panel stays focused.
- *
- * Distinct from `VoiceParamsEditor` which sets character-level voice
- * generation hyperparameters (top_k/top_p/temperature) for the character's
- * voice *sample* — that one is unrelated to the scene-level mode catalog.
+ * Voice *creation* modes (qwen3_voice_design, directed_clone) are not
+ * surfaced here — they live on the character inspector.
  */
-export default function SceneVoiceParamsEditor({
-  value,
-  onChange,
-  hasReferenceAudio,
-  defaultMode = "qwen3_voice_design",
-}: Props) {
+export default function SceneVoiceParamsEditor({ value, onChange, character }: Props) {
+  const sourceInfo = describeVoiceSource(character);
+  const defaultMode = pickDefaultMode(character);
   const mode = (value.mode ?? defaultMode) as VoiceMode;
   const spec = useMemo(
     () => VOICE_MODE_OPTIONS.find((o) => o.id === mode) ?? VOICE_MODE_OPTIONS[0],
     [mode],
   );
 
-  // Keep value.mode in sync if it was missing — saves a click on legacy rows.
+  // Sync mode to default once on first render so legacy rows pick up the
+  // character-aware default without forcing a click.
   useEffect(() => {
-    if (!value.mode) onChange({ ...value, mode });
+    if (!value.mode) onChange({ ...value, mode: defaultMode });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -69,9 +67,12 @@ export default function SceneVoiceParamsEditor({
     onChange(next);
   };
 
-  const refAudioMissing = spec.needsRefAudio && !hasReferenceAudio;
+  const refAudioMissing = spec.needsRefAudio && !character?.voice_sample_path;
+  const voiceboxMissing =
+    spec.id === "qwen3_voicebox_instruct" &&
+    !character?.voicebox_speaker &&
+    !value.speaker;
 
-  // Group dropdown by family for visual scan.
   type ModeOption = (typeof VOICE_MODE_OPTIONS)[number];
   const grouped = useMemo(() => {
     const out: Record<string, ModeOption[]> = {
@@ -83,10 +84,30 @@ export default function SceneVoiceParamsEditor({
     return out;
   }, []);
 
+  // Effective speaker for preset modes: scene override → character preset →
+  // first speaker. Used as the dropdown value so the UI reflects what the
+  // backend will actually use.
+  const effectivePresetSpeaker =
+    value.speaker ??
+    character?.voice_preset_speaker ??
+    QWEN3_CUSTOM_VOICE_SPEAKERS[0];
+
   return (
     <div className="space-y-3">
+      {/* Source banner — makes it explicit that voice already comes from the character. */}
+      <div className="rounded-lg border border-white/10 bg-black/20 p-2 text-[11px] text-gray-300 flex items-start gap-2">
+        <Mic className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+        <div>
+          <div className="text-gray-400">소스 (캐릭터에서 상속)</div>
+          <div className="text-white">{sourceInfo.title}</div>
+          {sourceInfo.detail && (
+            <div className="text-[10px] text-gray-500 mt-0.5">{sourceInfo.detail}</div>
+          )}
+        </div>
+      </div>
+
       <div>
-        <label className="text-[11px] text-gray-400 mb-1 block">합성 모드</label>
+        <label className="text-[11px] text-gray-400 mb-1 block">씬 합성 모드</label>
         <select
           className="input-base w-full"
           value={mode}
@@ -111,40 +132,46 @@ export default function SceneVoiceParamsEditor({
         <p className="mt-1 text-[10px] text-gray-500">{spec.description}</p>
         {refAudioMissing && (
           <p className="mt-1 text-[10px] text-amber-300">
-            ⚠ 이 모드는 캐릭터 보이스 샘플(ref audio) 이 필요합니다. 캐릭터 인스펙터에서 음성 샘플을 업로드하세요.
+            ⚠ 이 모드는 캐릭터 음성 샘플(WAV) 이 필요합니다. 캐릭터 인스펙터에서 음성을 디자인하거나 WAV 를 업로드하세요.
+          </p>
+        )}
+        {voiceboxMissing && (
+          <p className="mt-1 text-[10px] text-amber-300">
+            ⚠ 이 모드는 캐릭터에 등록된 voicebox speaker 가 필요합니다. 캐릭터 인스펙터의 VoiceBox 섹션에서 ckpt + speaker 이름을 설정하거나, 아래 speaker 필드에 직접 입력하세요.
           </p>
         )}
       </div>
 
-      {/* Instruct — used by every mode that has an instruct slot.
-          For voice_design family the user's voice_design_text is also surfaced
-          here as the "instruct" so editing in one place updates both calls. */}
-      {(spec.needsDesignText || spec.id !== "qwen3_voice_clone") && (
+      {/* Instruct (톤/감정 지시) — 거의 모든 씬 모드에 있음. clone-only 만 제외. */}
+      {spec.id !== "qwen3_voice_clone" && spec.id !== "s2pro_voice_clone" && (
         <PromptParam
-          label={spec.needsDesignText ? "Voice Design instruct" : "Instruct (톤/감정/연기 지시)"}
-          placeholder={spec.needsDesignText
-            ? "Warm intimate Korean female voice, soft breath..."
-            : "Speak softly with restrained sadness, steady pace..."}
+          label="Instruct (톤/감정/연기 지시)"
+          placeholder="Speak softly with restrained sadness, steady pace, soft breath at end of phrases..."
           rows={2}
           value={value.instruct ?? ""}
           onChange={(v) => set("instruct", v || undefined)}
         />
       )}
 
-      {/* Built-in speaker preset (Qwen3CustomVoice / VoiceBoxInstruct) */}
-      {spec.needsSpeakerPreset && spec.family === "qwen3_native" && (
+      {/* Built-in Qwen3 speaker preset (qwen3_custom_voice) */}
+      {spec.id === "qwen3_custom_voice" && (
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[10px] text-gray-500">Speaker (preset)</label>
             <select
               className="input-base w-full"
-              value={value.speaker ?? QWEN3_CUSTOM_VOICE_SPEAKERS[0]}
+              value={effectivePresetSpeaker}
               onChange={(e) => set("speaker", e.target.value)}
             >
               {QWEN3_CUSTOM_VOICE_SPEAKERS.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+            {character?.voice_preset_speaker && !value.speaker && (
+              <p className="text-[10px] text-gray-500 mt-1">
+                캐릭터 기본값: {character.voice_preset_speaker}
+              </p>
+            )}
           </div>
           <div>
             <label className="text-[10px] text-gray-500">Custom speaker name (선택)</label>
@@ -158,31 +185,39 @@ export default function SceneVoiceParamsEditor({
         </div>
       )}
 
-      {/* VoiceBoxInstruct uses a free-form speaker name (no preset list) */}
-      {spec.needsSpeakerPreset && spec.family === "qwen3_voicebox" && (
+      {/* VoiceBox named speaker — pulled from character.voicebox_speaker by default. */}
+      {spec.id === "qwen3_voicebox_instruct" && (
         <div>
           <label className="text-[10px] text-gray-500">VoiceBox speaker name</label>
           <input
             className="input-base w-full"
-            placeholder="mai / auto / 등록한 화자 이름"
-            value={value.speaker ?? "mai"}
-            onChange={(e) => set("speaker", e.target.value)}
+            placeholder={character?.voicebox_speaker ?? "예: mai"}
+            value={value.speaker ?? character?.voicebox_speaker ?? ""}
+            onChange={(e) => set("speaker", e.target.value || undefined)}
           />
+          {character?.voicebox_speaker && !value.speaker && (
+            <p className="text-[10px] text-gray-500 mt-1">
+              캐릭터 등록 speaker: <span className="text-gray-300">{character.voicebox_speaker}</span>
+              {character.voicebox_checkpoint && (
+                <> · ckpt: <span className="text-gray-400">{character.voicebox_checkpoint}</span></>
+              )}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Reference text — used by clone modes. Optional but recommended. */}
+      {/* Reference text — clone modes. Optional but improves accuracy. */}
       {spec.needsRefAudio && (
         <PromptParam
-          label="Reference text (보이스 샘플의 실제 발화)"
-          placeholder="비워두면 자동 추정. 정확히 입력하면 클론 정확도 ↑"
+          label="Reference text (보이스 샘플의 실제 발화 — 선택)"
+          placeholder={character?.voice_sample_text ?? "비워두면 자동 추정"}
           rows={1}
-          value={value.ref_text ?? ""}
+          value={value.ref_text ?? character?.voice_sample_text ?? ""}
           onChange={(v) => set("ref_text", v || undefined)}
         />
       )}
 
-      {/* Hybrid-only knobs (auto-anchor + saved customvoice speaker) */}
+      {/* Hybrid auto-anchor knobs */}
       {spec.id === "qwen3_hybrid_clone_instruct_preset" && (
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -198,8 +233,8 @@ export default function SceneVoiceParamsEditor({
             <label className="text-[10px] text-gray-500">customvoice_speaker</label>
             <input
               className="input-base w-full"
-              placeholder="저장된 CustomVoice 화자 이름"
-              value={value.customvoice_speaker ?? ""}
+              placeholder={character?.voice_preset_speaker ?? "저장된 CustomVoice 화자"}
+              value={value.customvoice_speaker ?? character?.voice_preset_speaker ?? ""}
               onChange={(e) => set("customvoice_speaker", e.target.value || undefined)}
             />
           </div>
@@ -229,7 +264,7 @@ export default function SceneVoiceParamsEditor({
             <label className="text-[10px] text-gray-500">language</label>
             <select
               className="input-base w-full"
-              value={value.language ?? "Korean"}
+              value={value.language ?? character?.voice_language ?? "Korean"}
               onChange={(e) => set("language", e.target.value)}
             >
               {LANGUAGES.map((l) => (<option key={l} value={l}>{l}</option>))}
@@ -243,7 +278,6 @@ export default function SceneVoiceParamsEditor({
             <NumberParam label="ref_audio_max_sec" placeholder="30" value={value.ref_audio_max_seconds} onChange={(v) => set("ref_audio_max_seconds", v as number | undefined)} />
           )}
           {(spec.id === "qwen3_base_custom_voice_clone_instruct"
-            || spec.id === "qwen3_directed_clone_from_voice_design"
             || spec.id === "qwen3_hybrid_clone_instruct_preset") && (
             <label className="flex items-center gap-1 text-[11px] text-gray-300 col-span-2">
               <input
@@ -269,4 +303,48 @@ export default function SceneVoiceParamsEditor({
       </details>
     </div>
   );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function describeVoiceSource(c: Character | null): { title: string; detail?: string } {
+  if (!c) {
+    return { title: "캐릭터 없음", detail: "이 씬에 캐릭터를 먼저 배정하세요." };
+  }
+  const registered = c.voicebox_speaker && c.voicebox_checkpoint;
+  const baselineLabel =
+    c.voice_source === "upload"
+      ? "WAV 업로드"
+      : c.voice_source === "design"
+        ? "Voice Design"
+        : c.voice_sample_path
+          ? (c.voice_design ? "Voice Design" : "WAV 업로드")
+          : "미설정";
+
+  if (registered) {
+    return {
+      title: `${c.name} · ${baselineLabel} → 모델 등록됨`,
+      detail: `speaker = ${c.voicebox_speaker} (ref audio 불필요, 일관 음색)`,
+    };
+  }
+  if (c.voice_sample_path) {
+    return {
+      title: `${c.name} · ${baselineLabel} (clone baseline)`,
+      detail: c.voice_design ?? c.voice_sample_path,
+    };
+  }
+  return {
+    title: `${c.name} · 음성 미설정`,
+    detail: "캐릭터 인스펙터에서 baseline WAV 를 먼저 만드세요.",
+  };
+}
+
+function pickDefaultMode(c: Character | null): VoiceMode {
+  if (!c) return "qwen3_hybrid_clone_instruct_preset";
+  // 등록된 캐릭터가 최우선 — ref 없이 즉시 호출.
+  if (c.voicebox_speaker && c.voicebox_checkpoint) return "qwen3_voicebox_instruct";
+  // 엔진 기본 페어링.
+  if (c.tts_engine === "s2pro" && c.voice_sample_path) return "s2pro_voice_clone";
+  if (c.voice_sample_path) return "qwen3_base_custom_voice_clone_instruct";
+  return "qwen3_hybrid_clone_instruct_preset";
 }

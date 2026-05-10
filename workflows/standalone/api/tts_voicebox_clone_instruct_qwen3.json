@@ -23,19 +23,22 @@
     }
   },
   "3": {
-    "class_type": "Qwen3VoiceClone",
+    "class_type": "Qwen3VoiceBoxCloneInstruct",
     "inputs": {
       "model": [
         "1",
         0
       ],
       "text": "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
+      "instruct": "Whisper-soft delivery.",
       "seed": 42,
       "language": "Korean",
-      "max_new_tokens": 2048,
-      "temperature": 0.9,
-      "top_p": 0.9,
-      "ref_audio_max_seconds": 30.0,
+      "speaker": "auto",
+      "strategy": "embedded_encoder_with_ref_code",
+      "max_new_tokens": 1024,
+      "temperature": 0.8,
+      "top_p": 0.95,
+      "non_streaming_mode": false,
       "ref_text": "",
       "ref_audio": [
         "2",
@@ -43,7 +46,7 @@
       ]
     },
     "_meta": {
-      "title": "Voice Clone"
+      "title": "VoiceBox · Clone + Instruct"
     }
   },
   "4": {
@@ -53,7 +56,7 @@
         "3",
         0
       ],
-      "filename_prefix": "standalone/tts_clone_qwen3"
+      "filename_prefix": "standalone/tts_voicebox_clone_instruct_qwen3"
     },
     "_meta": {
       "title": "음성 저장"

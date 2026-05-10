@@ -26,6 +26,28 @@ from .ui_workflow_adapter import load_ui_workflow_as_api_prompt
 from .workflow_catalog import ORIGINAL_WORKFLOWS, WORKFLOWS_DIR, resolve_original_workflow_path
 
 _COMFY_INPUT = Path(__file__).resolve().parent.parent.parent / "ComfyUI" / "input"
+# ComfyUI 의 모델 루트 — Qwen3-TTS 노드는 models/Qwen3-TTS/<repo-folder>/ 를 본다.
+# get_local_model_path() 가 만드는 경로와 동일한 규칙을 backend 에서 재현.
+_COMFY_MODELS = Path(__file__).resolve().parent.parent.parent / "ComfyUI" / "models"
+_QWEN3_TTS_DIR = _COMFY_MODELS / "Qwen3-TTS"
+_QWEN3_TTS_REPO_FOLDER = {
+    "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice": "Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+    "Qwen/Qwen3-TTS-12Hz-1.7B-Base":        "Qwen3-TTS-12Hz-1.7B-Base",
+}
+
+
+def qwen3_local_model_path(repo_id: str) -> Path:
+    """Mirror of ComfyUI_Qwen3-TTS' core.paths.get_local_model_path."""
+    folder = _QWEN3_TTS_REPO_FOLDER.get(repo_id, repo_id.replace("/", "_"))
+    return _QWEN3_TTS_DIR / folder
+
+
+def project_voicebox_dir(project_id: str) -> Path:
+    """Per-project voicebox checkpoint dir. Each character registered into this
+    project gets a new named speaker row inside this single ckpt — avoids
+    copying ~3GB of CustomVoice weights per character."""
+    return _QWEN3_TTS_DIR / "voicebox" / project_id
 
 
 def _original_workflow_path(name: str) -> Path:
@@ -113,6 +135,19 @@ def _fill_known_required_defaults(wf: dict) -> dict:
             inp.setdefault("sampler_name", "euler_ancestral")
             inp.setdefault("scheduler", "sgm_uniform")
             inp.setdefault("denoise", 1.0)
+        elif cls == "VHS_VideoCombine":
+            # UI export 의 widget 값들이 API prompt 변환에서 누락되므로 — 노드의
+            # required 슬롯에 합리적 기본값을 채워 ComfyUI validation 통과.
+            inp.setdefault("frame_rate", 16)
+            inp.setdefault("loop_count", 0)
+            inp.setdefault("filename_prefix", "AnimateDiff")
+            inp.setdefault("format", "video/h264-mp4")
+            inp.setdefault("pix_fmt", "yuv420p")
+            inp.setdefault("crf", 19)
+            inp.setdefault("save_metadata", True)
+            inp.setdefault("trim_to_audio", False)
+            inp.setdefault("pingpong", False)
+            inp.setdefault("save_output", True)
     return wf
 
 
@@ -307,6 +342,123 @@ def patch_voice(
                 inp["design_instruct"] = params.get("instruct") or voice_design_text or ""
     _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf
+
+
+# ── 단계 1.5: VoiceBox 화자 영구 등록 (morph) ──────────────────────────────
+
+def patch_voicebox_register(
+    *,
+    voice_sample_path: str,
+    target_speaker: str,
+    project_voicebox_path: Path,
+    base_repo_id: str = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    anchor_speaker: str = "auto",
+    timbre_strength: float = 0.72,
+    language: str = "Korean",
+    preserve_norm: bool = True,
+    verify_text: str = "안녕하세요. 이 목소리는 모델에 영구 등록된 화자입니다.",
+    verify_prefix: Optional[str] = None,
+) -> dict:
+    """Build the Qwen3VoiceBoxMorphSpeaker workflow that bakes a character's
+    WAV into a project-shared voicebox ckpt as a new named speaker.
+
+    First registration in a project (project_voicebox_path doesn't exist yet)
+    bootstraps from CustomVoice → copies it to project_voicebox_path with the
+    new speaker added. Subsequent registrations open that ckpt and morph in
+    place — only one extra row per character, no per-character ckpt copies.
+
+    The graph also runs Qwen3VoiceBoxInstruct + SaveAudio with the freshly
+    registered speaker as a verification + output anchor. SaveAudio is the
+    only OUTPUT_NODE in the chain; without it ComfyUI would skip executing
+    the morph (RETURN_TYPES alone don't trigger execution).
+    """
+    staged_ref = _stage_ref(voice_sample_path, "voicebox_ref")
+    if not staged_ref:
+        raise ValueError(
+            f"voicebox 등록을 위한 ref audio 를 찾을 수 없습니다: {voice_sample_path}"
+        )
+
+    project_voicebox_path = Path(project_voicebox_path)
+    already_initialized = (project_voicebox_path / "config.json").exists() and (
+        project_voicebox_path / "model.safetensors"
+    ).exists()
+
+    base_path = qwen3_local_model_path(base_repo_id)
+    if not (base_path / "config.json").exists():
+        raise ValueError(
+            f"Base CustomVoice 체크포인트가 없습니다: {base_path}. setup.sh 의 모델 다운로드 스크립트를 먼저 실행하세요."
+        )
+
+    if already_initialized:
+        # In-place add a new speaker row to the existing project voicebox.
+        morph_model_path = str(project_voicebox_path)
+        update_in_place = True
+        morph_output_path = ""
+    else:
+        # Bootstrap: copy CustomVoice → project voicebox dir (~3GB once).
+        project_voicebox_path.parent.mkdir(parents=True, exist_ok=True)
+        morph_model_path = str(base_path)
+        update_in_place = False
+        morph_output_path = str(project_voicebox_path)
+
+    prefix = verify_prefix or "voicebox_register_verify"
+
+    return {
+        "1": {
+            "class_type": "LoadAudio",
+            "inputs": {"audio": staged_ref, "upload": "audio"},
+            "_meta": {"title": "캐릭터 ref 오디오"},
+        },
+        "2": {
+            "class_type": "Qwen3VoiceBoxMorphSpeaker",
+            "inputs": {
+                "model_path": morph_model_path,
+                "target_speaker": target_speaker,
+                "output_model_path": morph_output_path,
+                "update_in_place": bool(update_in_place),
+                "language": language,
+                "anchor_speaker": anchor_speaker,
+                "ref_audio": ["1", 0],
+                "timbre_strength": float(timbre_strength),
+                "preserve_norm": bool(preserve_norm),
+            },
+            "_meta": {"title": f"VoiceBox · 화자 등록 ({target_speaker})"},
+        },
+        "3": {
+            # Loader 의 local_model_path 슬롯에 morph 가 반환한 STRING(model_path)
+            # 을 직접 wire — 새로 쓴 ckpt 를 그대로 로드한다.
+            "class_type": "Qwen3Loader",
+            "inputs": {
+                "repo_id": base_repo_id,
+                "source": "HuggingFace",
+                "precision": "bf16",
+                "attention": "sdpa",
+                "local_model_path": ["2", 0],
+            },
+            "_meta": {"title": "신규 voicebox 로더"},
+        },
+        "4": {
+            "class_type": "Qwen3VoiceBoxInstruct",
+            "inputs": {
+                "model": ["3", 0],
+                # Speaker name 도 morph 가 반환한 STRING 을 그대로 사용 — 오타 위험 0.
+                "speaker": ["2", 1],
+                "text": verify_text,
+                "seed": 42,
+                "language": language,
+                "instruct": "",
+                "max_new_tokens": 1024,
+                "temperature": 0.85,
+                "top_p": 0.9,
+            },
+            "_meta": {"title": "등록 검증 합성"},
+        },
+        "5": {
+            "class_type": "SaveAudio",
+            "inputs": {"audio": ["4", 0], "filename_prefix": prefix},
+            "_meta": {"title": "검증 sample 저장"},
+        },
+    }
 
 
 # ── 단계 2: 이미지 ────────────────────────────────────────────────────

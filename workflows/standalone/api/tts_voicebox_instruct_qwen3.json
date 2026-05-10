@@ -13,47 +13,33 @@
     }
   },
   "2": {
-    "class_type": "LoadAudio",
-    "inputs": {
-      "audio": "voicesample.wav",
-      "upload": "audio"
-    },
-    "_meta": {
-      "title": "레퍼런스 오디오"
-    }
-  },
-  "3": {
-    "class_type": "Qwen3VoiceClone",
+    "class_type": "Qwen3VoiceBoxInstruct",
     "inputs": {
       "model": [
         "1",
         0
       ],
+      "speaker": "mai",
       "text": "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
       "seed": 42,
       "language": "Korean",
+      "instruct": "Energetic and clear.",
       "max_new_tokens": 2048,
       "temperature": 0.9,
-      "top_p": 0.9,
-      "ref_audio_max_seconds": 30.0,
-      "ref_text": "",
-      "ref_audio": [
-        "2",
-        0
-      ]
+      "top_p": 0.9
     },
     "_meta": {
-      "title": "Voice Clone"
+      "title": "VoiceBox · Instruct"
     }
   },
-  "4": {
+  "3": {
     "class_type": "SaveAudio",
     "inputs": {
       "audio": [
-        "3",
+        "2",
         0
       ],
-      "filename_prefix": "standalone/tts_clone_qwen3"
+      "filename_prefix": "standalone/tts_voicebox_instruct_qwen3"
     },
     "_meta": {
       "title": "음성 저장"

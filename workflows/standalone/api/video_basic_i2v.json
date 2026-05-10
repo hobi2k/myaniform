@@ -1,0 +1,592 @@
+{
+  "7": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "6": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader (rgthree)"
+    }
+  },
+  "5": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader Low"
+    }
+  },
+  "8": {
+    "class_type": "PrimitiveFloat",
+    "inputs": {
+      "value": 8
+    },
+    "_meta": {
+      "title": "Shift"
+    }
+  },
+  "4": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "shift": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "11": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "13": {
+    "class_type": "DF_DynamicPrompts_Text_Box",
+    "inputs": {
+      "Text": "gentle camera drift, breathing motion, warm interior. Motion rhythm should match the sound design: camera movement, body language, hair and fabric movement, breathing, and small environmental reactions should land on the same beats as the audio. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person"
+    },
+    "_meta": {
+      "title": "DynamicPrompts Text Box (Positive Prompt)"
+    }
+  },
+  "12": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": [
+        "13",
+        0
+      ],
+      "string_b": "",
+      "delimiter": ""
+    },
+    "_meta": {
+      "title": "StringConcatenate"
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "11",
+        0
+      ],
+      "text": "gentle camera drift, breathing motion, warm interior. Motion rhythm should match the sound design: camera movement, body language, hair and fabric movement, breathing, and small environmental reactions should land on the same beats as the audio. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person"
+    },
+    "_meta": {
+      "title": "Positive encode"
+    }
+  },
+  "14": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "11",
+        0
+      ],
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走\n\nwidely open eyes, different character, changed face, changed hairstyle, changed hair color, changed outfit, new person, inconsistent identity, inconsistent body, recast character"
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "15": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "17": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "video_start.png",
+      "upload": "image"
+    },
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "19": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 228
+    },
+    "_meta": {
+      "title": "PrimitiveInt"
+    }
+  },
+  "18": {
+    "_meta": {
+      "title": "Runtime start image"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "video_start.png",
+      "upload": "image"
+    }
+  },
+  "16": {
+    "class_type": "Any Switch (rgthree)",
+    "inputs": {
+      "any_01": [
+        "17",
+        0
+      ],
+      "any_02": [
+        "18",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Any Switch (rgthree)"
+    }
+  },
+  "9": {
+    "class_type": "WanImageToVideo",
+    "inputs": {
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "14",
+        0
+      ],
+      "vae": [
+        "15",
+        0
+      ],
+      "start_image": [
+        "17",
+        0
+      ],
+      "width": 832,
+      "height": 1216,
+      "length": 81,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "WanImageToVideo"
+    }
+  },
+  "24": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "23": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "24",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader (rgthree)"
+    }
+  },
+  "22": {
+    "class_type": "Power Lora Loader (rgthree)",
+    "inputs": {
+      "model": [
+        "23",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Power Lora Loader High"
+    }
+  },
+  "21": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "22",
+        0
+      ],
+      "shift": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "20": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "21",
+        0
+      ],
+      "positive": [
+        "9",
+        0
+      ],
+      "negative": [
+        "9",
+        1
+      ],
+      "latent_image": [
+        "9",
+        2
+      ],
+      "add_noise": "enable",
+      "noise_seed": 14360594551310,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 3,
+      "return_with_leftover_noise": "enable"
+    },
+    "_meta": {
+      "title": "KSampler (Advanced) High"
+    }
+  },
+  "3": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "9",
+        0
+      ],
+      "negative": [
+        "9",
+        1
+      ],
+      "latent_image": [
+        "20",
+        0
+      ],
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 3,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable"
+    },
+    "_meta": {
+      "title": "KSampler (Advanced) Low"
+    }
+  },
+  "2": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "15",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "1": {
+    "class_type": "ImageFromBatch+",
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "start": 80,
+      "length": -1
+    },
+    "_meta": {
+      "title": "ImageFromBatch+"
+    }
+  },
+  "25": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "21",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "26": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "28": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "29": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "34": {
+    "class_type": "easy showAnything",
+    "inputs": {
+      "anything": [
+        "12",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Final prompt preview"
+    }
+  },
+  "36": {
+    "class_type": "ImageScaleBy",
+    "inputs": {
+      "image": [
+        "29",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "scale_by": 1
+    },
+    "_meta": {
+      "title": "ImageScaleBy"
+    }
+  },
+  "35": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": [
+        "36",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "easy cleanGpuUsed"
+    }
+  },
+  "39": {
+    "class_type": "RIFE VFI",
+    "inputs": {
+      "frames": [
+        "35",
+        0
+      ],
+      "ckpt_name": "rife49.pth",
+      "clear_cache_after_n_frames": 32,
+      "multiplier": 2,
+      "fast_mode": false,
+      "ensemble": true,
+      "scale_factor": 1,
+      "dtype": "float32",
+      "torch_compile": false,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Frame Interpolation (RIFE)"
+    }
+  },
+  "40": {
+    "_meta": {
+      "title": "Runtime Wan I2V model"
+    },
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "41": {
+    "_meta": {
+      "title": "Runtime Wan I2V model"
+    },
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "42": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "2",
+        0
+      ],
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "standalone/video_basic_i2v",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "audio": [
+        "47",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VHS_VideoCombine"
+    }
+  },
+  "43": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "1",
+        0
+      ],
+      "filename_prefix": "standalone/video_basic_i2v"
+    },
+    "_meta": {
+      "title": "SaveImage"
+    }
+  },
+  "44": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "39",
+        0
+      ],
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "standalone/video_basic_i2v",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "audio": [
+        "47",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VHS_VideoCombine"
+    }
+  },
+  "45": {
+    "_meta": {
+      "title": "MMAudio 모델"
+    },
+    "class_type": "MMAudioModelLoader",
+    "inputs": {
+      "mmaudio_model": "mmaudio_large_44k_v2_fp16.safetensors",
+      "base_precision": "fp16"
+    }
+  },
+  "46": {
+    "_meta": {
+      "title": "MMAudio Feature Utils"
+    },
+    "class_type": "MMAudioFeatureUtilsLoader",
+    "inputs": {
+      "vae_model": "mmaudio_vae_44k_fp16.safetensors",
+      "synchformer_model": "mmaudio_synchformer_fp16.safetensors",
+      "clip_model": "apple_DFN5B-CLIP-ViT-H-14-384_fp16.safetensors",
+      "mode": "44k",
+      "precision": "fp16"
+    }
+  },
+  "47": {
+    "_meta": {
+      "title": "MMAudio SFX"
+    },
+    "class_type": "MMAudioSampler",
+    "inputs": {
+      "mmaudio_model": [
+        "45",
+        0
+      ],
+      "feature_utils": [
+        "46",
+        0
+      ],
+      "images": [
+        "39",
+        0
+      ],
+      "duration": 5.0,
+      "steps": 25,
+      "cfg": 4.5,
+      "seed": 0,
+      "prompt": "soft room tone, distant ambience",
+      "negative_prompt": "talking, speech, voice, voices, singing, music, words, laughter, robotic, low quality",
+      "mask_away_clip": false,
+      "force_offload": true
+    }
+  }
+}

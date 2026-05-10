@@ -3,6 +3,19 @@
     "1": {
       "class_type": "Qwen3Loader",
       "inputs": {
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "sdpa",
+        "local_model_path": ""
+      },
+      "_meta": {
+        "title": "Loader · Qwen3-TTS-12Hz-1.7B-Base"
+      }
+    },
+    "2": {
+      "class_type": "Qwen3Loader",
+      "inputs": {
         "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
         "source": "HuggingFace",
         "precision": "bf16",
@@ -13,7 +26,7 @@
         "title": "Loader · Qwen3-TTS-12Hz-1.7B-CustomVoice"
       }
     },
-    "2": {
+    "3": {
       "class_type": "LoadAudio",
       "inputs": {
         "audio": "voicesample.wav",
@@ -23,38 +36,44 @@
         "title": "레퍼런스 오디오"
       }
     },
-    "3": {
-      "class_type": "Qwen3VoiceClone",
+    "4": {
+      "class_type": "Qwen3BaseCustomVoiceCloneInstruct",
       "inputs": {
-        "model": [
+        "base_model": [
           "1",
           0
         ],
-        "text": "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
-        "seed": 42,
-        "language": "Korean",
-        "max_new_tokens": 2048,
-        "temperature": 0.9,
-        "top_p": 0.9,
-        "ref_audio_max_seconds": 30.0,
-        "ref_text": "",
-        "ref_audio": [
+        "custom_voice_model": [
           "2",
           0
-        ]
-      },
-      "_meta": {
-        "title": "Voice Clone"
-      }
-    },
-    "4": {
-      "class_type": "SaveAudio",
-      "inputs": {
-        "audio": [
+        ],
+        "ref_audio": [
           "3",
           0
         ],
-        "filename_prefix": "standalone/tts_clone_qwen3"
+        "ref_text": "",
+        "text": "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
+        "seed": 42,
+        "language": "Korean",
+        "instruct": "Speak softly with warm, gentle pacing.",
+        "ref_audio_max_seconds": 30.0,
+        "x_vector_only_mode": false,
+        "max_new_tokens": 2048,
+        "temperature": 0.9,
+        "top_p": 0.9
+      },
+      "_meta": {
+        "title": "Base + CustomVoice · Clone + Instruct"
+      }
+    },
+    "5": {
+      "class_type": "SaveAudio",
+      "inputs": {
+        "audio": [
+          "4",
+          1
+        ],
+        "filename_prefix": "standalone/tts_clone_instruct_qwen3"
       },
       "_meta": {
         "title": "음성 저장"

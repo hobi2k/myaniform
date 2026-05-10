@@ -369,8 +369,7 @@ export default function SceneInspector({
           </div>
           {(() => {
             const voiceParams = parseJson<VoiceParams>(form.voice_params ?? "", {});
-            const firstChar = characters.find((c) => charIds.includes(c.id));
-            const hasRefAudio = !!firstChar?.voice_sample_path;
+            const firstChar = characters.find((c) => charIds.includes(c.id)) ?? null;
             return (
               <SceneVoiceParamsEditor
                 value={voiceParams}
@@ -384,7 +383,7 @@ export default function SceneInspector({
                     tts_engine: inferred,
                   }));
                 }}
-                hasReferenceAudio={hasRefAudio}
+                character={firstChar}
               />
             );
           })()}

@@ -1,9 +1,9 @@
 {
   "prompt": {
-    "5": {
+    "7": {
       "class_type": "UNETLoader",
       "inputs": {
-        "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+        "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
         "weight_dtype": "default"
       },
       "_meta": {
@@ -11,133 +11,22 @@
       }
     },
     "6": {
-      "_meta": {
-        "title": "Runtime Wan I2V model"
-      },
-      "class_type": "UNETLoader",
-      "inputs": {
-        "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
-        "weight_dtype": "default"
-      }
-    },
-    "4": {
-      "class_type": "Any Switch (rgthree)",
-      "inputs": {
-        "any_01": [
-          "5",
-          0
-        ],
-        "any_02": [
-          "6",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "Any Switch (rgthree)"
-      }
-    },
-    "3": {
       "class_type": "Power Lora Loader (rgthree)",
       "inputs": {
         "model": [
-          "4",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "Power Lora Loader (rgthree)"
-      }
-    },
-    "2": {
-      "class_type": "Power Lora Loader (rgthree)",
-      "inputs": {
-        "model": [
-          "3",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "Power Lora Loader High"
-      }
-    },
-    "7": {
-      "class_type": "PrimitiveFloat",
-      "inputs": {
-        "value": 8
-      },
-      "_meta": {
-        "title": "Shift"
-      }
-    },
-    "1": {
-      "class_type": "ModelSamplingSD3",
-      "inputs": {
-        "model": [
-          "2",
-          0
-        ],
-        "shift": [
           "7",
           0
         ]
       },
       "_meta": {
-        "title": "ModelSamplingSD3"
-      }
-    },
-    "12": {
-      "class_type": "UNETLoader",
-      "inputs": {
-        "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
-        "weight_dtype": "default"
-      },
-      "_meta": {
-        "title": "UNETLoader"
-      }
-    },
-    "13": {
-      "_meta": {
-        "title": "Runtime Wan I2V model"
-      },
-      "class_type": "UNETLoader",
-      "inputs": {
-        "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
-        "weight_dtype": "default"
-      }
-    },
-    "11": {
-      "class_type": "Any Switch (rgthree)",
-      "inputs": {
-        "any_01": [
-          "12",
-          0
-        ],
-        "any_02": [
-          "13",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "Any Switch (rgthree)"
-      }
-    },
-    "10": {
-      "class_type": "Power Lora Loader (rgthree)",
-      "inputs": {
-        "model": [
-          "11",
-          0
-        ]
-      },
-      "_meta": {
         "title": "Power Lora Loader (rgthree)"
       }
     },
-    "9": {
+    "5": {
       "class_type": "Power Lora Loader (rgthree)",
       "inputs": {
         "model": [
-          "10",
+          "6",
           0
         ]
       },
@@ -146,14 +35,23 @@
       }
     },
     "8": {
+      "class_type": "PrimitiveFloat",
+      "inputs": {
+        "value": 8
+      },
+      "_meta": {
+        "title": "Shift"
+      }
+    },
+    "4": {
       "class_type": "ModelSamplingSD3",
       "inputs": {
         "model": [
-          "9",
+          "5",
           0
         ],
         "shift": [
-          "7",
+          "8",
           0
         ]
       },
@@ -161,65 +59,7 @@
         "title": "ModelSamplingSD3"
       }
     },
-    "14": {
-      "class_type": "easy cleanGpuUsed",
-      "inputs": {
-        "anything": [
-          "1",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "easy cleanGpuUsed"
-      }
-    },
-    "15": {
-      "class_type": "easy cleanGpuUsed",
-      "inputs": {
-        "anything": [
-          "8",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "easy cleanGpuUsed"
-      }
-    },
-    "20": {
-      "class_type": "DF_DynamicPrompts_Text_Box",
-      "inputs": {
-        "Text": "subtle breathing motion, slow camera drift, warm interior light. Motion rhythm should match the sound design: camera movement, body language, hair and fabric movement, breathing, and small environmental reactions should land on the same beats as the audio. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person"
-      },
-      "_meta": {
-        "title": "DynamicPrompts Text Box (Positive Prompt)"
-      }
-    },
-    "19": {
-      "class_type": "StringConcatenate",
-      "inputs": {
-        "string_a": [
-          "20",
-          0
-        ],
-        "string_b": "",
-        "delimiter": ""
-      },
-      "_meta": {
-        "title": "StringConcatenate"
-      }
-    },
-    "23": {
-      "_meta": {
-        "title": "Runtime Wan text encoder"
-      },
-      "class_type": "CLIPLoader",
-      "inputs": {
-        "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-        "type": "wan",
-        "device": "default"
-      }
-    },
-    "24": {
+    "11": {
       "class_type": "CLIPLoader",
       "inputs": {
         "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
@@ -230,36 +70,56 @@
         "title": "CLIPLoader"
       }
     },
-    "22": {
-      "class_type": "Any Switch (rgthree)",
+    "13": {
+      "class_type": "DF_DynamicPrompts_Text_Box",
       "inputs": {
-        "any_01": [
-          "23",
-          0
-        ],
-        "any_02": [
-          "24",
-          0
-        ]
+        "Text": "gentle camera drift, breathing motion, warm interior. Motion rhythm should match the sound design: camera movement, body language, hair and fabric movement, breathing, and small environmental reactions should land on the same beats as the audio. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person"
       },
       "_meta": {
-        "title": "Any Switch (rgthree)"
+        "title": "DynamicPrompts Text Box (Positive Prompt)"
       }
     },
-    "21": {
+    "12": {
+      "class_type": "StringConcatenate",
+      "inputs": {
+        "string_a": [
+          "13",
+          0
+        ],
+        "string_b": "",
+        "delimiter": ""
+      },
+      "_meta": {
+        "title": "StringConcatenate"
+      }
+    },
+    "10": {
       "class_type": "CLIPTextEncode",
       "inputs": {
         "clip": [
-          "22",
+          "11",
           0
         ],
-        "text": "subtle breathing motion, slow camera drift, warm interior light. Motion rhythm should match the sound design: camera movement, body language, hair and fabric movement, breathing, and small environmental reactions should land on the same beats as the audio. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person"
+        "text": "gentle camera drift, breathing motion, warm interior. Motion rhythm should match the sound design: camera movement, body language, hair and fabric movement, breathing, and small environmental reactions should land on the same beats as the audio. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person"
       },
       "_meta": {
         "title": "Positive encode"
       }
     },
-    "25": {
+    "14": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": [
+          "11",
+          0
+        ],
+        "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走\n\nwidely open eyes, different character, changed face, changed hairstyle, changed hair color, changed outfit, new person, inconsistent identity, inconsistent body, recast character"
+      },
+      "_meta": {
+        "title": "CLIP Text Encode (Negative Prompt)"
+      }
+    },
+    "15": {
       "class_type": "VAELoader",
       "inputs": {
         "vae_name": "wan_2.1_vae.safetensors"
@@ -268,20 +128,7 @@
         "title": "VAELoader"
       }
     },
-    "29": {
-      "class_type": "CLIPTextEncode",
-      "inputs": {
-        "clip": [
-          "22",
-          0
-        ],
-        "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走, different character, changed face, changed hairstyle, changed hair color, changed outfit, new person, inconsistent identity, inconsistent body, recast character"
-      },
-      "_meta": {
-        "title": "CLIP Text Encode (Negative Prompt)"
-      }
-    },
-    "31": {
+    "17": {
       "class_type": "LoadImage",
       "inputs": {
         "image": "video_start.png",
@@ -291,16 +138,16 @@
         "title": "LoadImage"
       }
     },
-    "33": {
+    "19": {
       "class_type": "PrimitiveInt",
       "inputs": {
-        "value": 190
+        "value": 228
       },
       "_meta": {
         "title": "PrimitiveInt"
       }
     },
-    "32": {
+    "18": {
       "_meta": {
         "title": "Runtime start image"
       },
@@ -310,15 +157,15 @@
         "upload": "image"
       }
     },
-    "30": {
+    "16": {
       "class_type": "Any Switch (rgthree)",
       "inputs": {
         "any_01": [
-          "31",
+          "17",
           0
         ],
         "any_02": [
-          "32",
+          "18",
           0
         ]
       },
@@ -326,27 +173,23 @@
         "title": "Any Switch (rgthree)"
       }
     },
-    "28": {
-      "class_type": "WanFirstLastFrameToVideo",
+    "9": {
+      "class_type": "WanImageToVideo",
       "inputs": {
         "positive": [
-          "21",
+          "10",
           0
         ],
         "negative": [
-          "29",
+          "14",
           0
         ],
         "vae": [
-          "25",
+          "15",
           0
         ],
         "start_image": [
-          "31",
-          0
-        ],
-        "end_image": [
-          "51",
+          "17",
           0
         ],
         "width": 832,
@@ -355,30 +198,80 @@
         "batch_size": 1
       },
       "_meta": {
-        "title": "WanFirstLastFrameToVideo"
+        "title": "WanImageToVideo"
       }
     },
-    "34": {
+    "24": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+        "weight_dtype": "default"
+      },
+      "_meta": {
+        "title": "UNETLoader"
+      }
+    },
+    "23": {
+      "class_type": "Power Lora Loader (rgthree)",
+      "inputs": {
+        "model": [
+          "24",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "Power Lora Loader (rgthree)"
+      }
+    },
+    "22": {
+      "class_type": "Power Lora Loader (rgthree)",
+      "inputs": {
+        "model": [
+          "23",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "Power Lora Loader High"
+      }
+    },
+    "21": {
+      "class_type": "ModelSamplingSD3",
+      "inputs": {
+        "model": [
+          "22",
+          0
+        ],
+        "shift": [
+          "8",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "ModelSamplingSD3"
+      }
+    },
+    "20": {
       "class_type": "KSamplerAdvanced",
       "inputs": {
         "model": [
-          "1",
+          "21",
           0
         ],
         "positive": [
-          "28",
+          "9",
           0
         ],
         "negative": [
-          "28",
+          "9",
           1
         ],
         "latent_image": [
-          "28",
+          "9",
           2
         ],
         "add_noise": "enable",
-        "noise_seed": 448919705766661,
+        "noise_seed": 14360594551310,
         "steps": 6,
         "cfg": 1,
         "sampler_name": "euler_ancestral",
@@ -391,23 +284,23 @@
         "title": "KSampler (Advanced) High"
       }
     },
-    "27": {
+    "3": {
       "class_type": "KSamplerAdvanced",
       "inputs": {
         "model": [
-          "8",
+          "4",
           0
         ],
         "positive": [
-          "28",
+          "9",
           0
         ],
         "negative": [
-          "28",
+          "9",
           1
         ],
         "latent_image": [
-          "34",
+          "20",
           0
         ],
         "add_noise": "disable",
@@ -424,11 +317,41 @@
         "title": "KSampler (Advanced) Low"
       }
     },
-    "26": {
+    "2": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": [
+          "3",
+          0
+        ],
+        "vae": [
+          "15",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "VAEDecode"
+      }
+    },
+    "1": {
+      "class_type": "ImageFromBatch+",
+      "inputs": {
+        "image": [
+          "2",
+          0
+        ],
+        "start": 80,
+        "length": -1
+      },
+      "_meta": {
+        "title": "ImageFromBatch+"
+      }
+    },
+    "25": {
       "class_type": "easy cleanGpuUsed",
       "inputs": {
         "anything": [
-          "27",
+          "21",
           0
         ]
       },
@@ -436,11 +359,47 @@
         "title": "easy cleanGpuUsed"
       }
     },
-    "35": {
+    "26": {
+      "class_type": "easy cleanGpuUsed",
+      "inputs": {
+        "anything": [
+          "4",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "easy cleanGpuUsed"
+      }
+    },
+    "28": {
+      "class_type": "easy cleanGpuUsed",
+      "inputs": {
+        "anything": [
+          "3",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "easy cleanGpuUsed"
+      }
+    },
+    "29": {
+      "class_type": "easy cleanGpuUsed",
+      "inputs": {
+        "anything": [
+          "2",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "easy cleanGpuUsed"
+      }
+    },
+    "34": {
       "class_type": "easy showAnything",
       "inputs": {
         "anything": [
-          "19",
+          "12",
           0
         ]
       },
@@ -449,70 +408,10 @@
       }
     },
     "36": {
-      "class_type": "VAEDecode",
-      "inputs": {
-        "samples": [
-          "27",
-          0
-        ],
-        "vae": [
-          "25",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "VAEDecode"
-      }
-    },
-    "40": {
-      "class_type": "ColorMatch",
-      "inputs": {
-        "image_ref": [
-          "30",
-          0
-        ],
-        "image_target": [
-          "36",
-          0
-        ],
-        "method": "mkl",
-        "strength": 1,
-        "multithread": true
-      },
-      "_meta": {
-        "title": "ColorMatch"
-      }
-    },
-    "39": {
-      "class_type": "ImageSelector",
-      "inputs": {
-        "images": [
-          "40",
-          0
-        ],
-        "selected_indexes": "1:-0"
-      },
-      "_meta": {
-        "title": "ImageSelector"
-      }
-    },
-    "47": {
-      "class_type": "easy cleanGpuUsed",
-      "inputs": {
-        "anything": [
-          "39",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "easy cleanGpuUsed"
-      }
-    },
-    "46": {
       "class_type": "ImageScaleBy",
       "inputs": {
         "image": [
-          "47",
+          "29",
           0
         ],
         "upscale_method": "lanczos",
@@ -522,11 +421,11 @@
         "title": "ImageScaleBy"
       }
     },
-    "45": {
+    "35": {
       "class_type": "easy cleanGpuUsed",
       "inputs": {
         "anything": [
-          "46",
+          "36",
           0
         ]
       },
@@ -534,11 +433,11 @@
         "title": "easy cleanGpuUsed"
       }
     },
-    "48": {
+    "39": {
       "class_type": "RIFE VFI",
       "inputs": {
         "frames": [
-          "45",
+          "35",
           0
         ],
         "ckpt_name": "rife49.pth",
@@ -555,16 +454,36 @@
         "title": "Frame Interpolation (RIFE)"
       }
     },
-    "49": {
+    "40": {
+      "_meta": {
+        "title": "Runtime Wan I2V model"
+      },
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "wan_i2v_low/DasiwaWAN22I2V14BLightspeed_synthseductionLowV9.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "41": {
+      "_meta": {
+        "title": "Runtime Wan I2V model"
+      },
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "wan_i2v_high/DasiwaWAN22I2V14BLightspeed_synthseductionHighV9.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "42": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
         "images": [
-          "48",
+          "2",
           0
         ],
         "frame_rate": 16,
         "loop_count": 0,
-        "filename_prefix": "standalone/video_loop_i2v",
+        "filename_prefix": "standalone/video_basic_i2v",
         "format": "video/h264-mp4",
         "pix_fmt": "yuv420p",
         "crf": 19,
@@ -573,7 +492,7 @@
         "pingpong": false,
         "save_output": true,
         "audio": [
-          "54",
+          "47",
           0
         ]
       },
@@ -581,7 +500,20 @@
         "title": "VHS_VideoCombine"
       }
     },
-    "50": {
+    "43": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "1",
+          0
+        ],
+        "filename_prefix": "standalone/video_basic_i2v"
+      },
+      "_meta": {
+        "title": "SaveImage"
+      }
+    },
+    "44": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
         "images": [
@@ -590,7 +522,7 @@
         ],
         "frame_rate": 16,
         "loop_count": 0,
-        "filename_prefix": "standalone/video_loop_i2v",
+        "filename_prefix": "standalone/video_basic_i2v",
         "format": "video/h264-mp4",
         "pix_fmt": "yuv420p",
         "crf": 19,
@@ -599,7 +531,7 @@
         "pingpong": false,
         "save_output": true,
         "audio": [
-          "54",
+          "47",
           0
         ]
       },
@@ -607,17 +539,7 @@
         "title": "VHS_VideoCombine"
       }
     },
-    "51": {
-      "_meta": {
-        "title": "Runtime end image"
-      },
-      "class_type": "LoadImage",
-      "inputs": {
-        "image": "video_end.png",
-        "upload": "image"
-      }
-    },
-    "52": {
+    "45": {
       "_meta": {
         "title": "MMAudio 모델"
       },
@@ -627,7 +549,7 @@
         "base_precision": "fp16"
       }
     },
-    "53": {
+    "46": {
       "_meta": {
         "title": "MMAudio Feature Utils"
       },
@@ -640,29 +562,29 @@
         "precision": "fp16"
       }
     },
-    "54": {
+    "47": {
       "_meta": {
         "title": "MMAudio SFX"
       },
       "class_type": "MMAudioSampler",
       "inputs": {
         "mmaudio_model": [
-          "52",
+          "45",
           0
         ],
         "feature_utils": [
-          "53",
+          "46",
           0
         ],
         "images": [
-          "48",
+          "39",
           0
         ],
         "duration": 5.0,
         "steps": 25,
         "cfg": 4.5,
         "seed": 0,
-        "prompt": "quiet room tone, soft cloth movement",
+        "prompt": "soft room tone, distant ambience",
         "negative_prompt": "talking, speech, voice, voices, singing, music, words, laughter, robotic, low quality",
         "mask_away_clip": false,
         "force_offload": true

@@ -24,11 +24,14 @@ from backend.services.workflow_patcher import (
     patch_character_sheet,
     patch_character_sprite_existing,
     patch_image,
+    patch_video_basic,
     patch_video_effect,
     patch_video_lipsync,
     patch_video_loop,
     patch_voice,
     patch_voice_design,
+    patch_voicebox_register,
+    project_voicebox_dir,
 )
 
 API_DIR = STANDALONE_WORKFLOWS_DIR / "api"
@@ -152,16 +155,87 @@ def main() -> None:
         manifest,
         [],
     )
+    # ── Scene-level voice mode catalog (7 modes) ──────────────────────────
+    # 각 모드는 voice_modes.VOICE_MODE_BUILDERS 의 빌더 한 개에 대응. 캐릭터의
+    # voice_sample_path 가 있다는 가정 (ref WAV) 으로 빌드한다.
+    DIALOGUE = "안녕하세요. 독립 실행 워크플로우 테스트입니다."
+
     write_workflow(
         "tts_clone_qwen3",
         patch_voice(
-            "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
-            str(assets["voicesample"]),
-            "qwen3",
+            DIALOGUE, str(assets["voicesample"]), "qwen3",
+            voice_params={"mode": "qwen3_voice_clone", "language": "Korean"},
             output_prefix="standalone/tts_clone_qwen3",
         ),
-        manifest,
-        ["voicesample.wav"],
+        manifest, ["voicesample.wav"],
+    )
+    write_workflow(
+        "tts_clone_instruct_qwen3",
+        patch_voice(
+            DIALOGUE, str(assets["voicesample"]), "qwen3",
+            voice_params={
+                "mode": "qwen3_base_custom_voice_clone_instruct",
+                "instruct": "Speak softly with warm, gentle pacing.",
+                "language": "Korean",
+            },
+            output_prefix="standalone/tts_clone_instruct_qwen3",
+        ),
+        manifest, ["voicesample.wav"],
+    )
+    write_workflow(
+        "tts_hybrid_qwen3",
+        patch_voice(
+            DIALOGUE, str(assets["voicesample"]), "qwen3",
+            voice_params={
+                "mode": "qwen3_hybrid_clone_instruct_preset",
+                "instruct": "Calm, deliberate delivery.",
+                "language": "Korean",
+            },
+            output_prefix="standalone/tts_hybrid_qwen3",
+        ),
+        manifest, ["voicesample.wav"],
+    )
+    write_workflow(
+        "tts_custom_voice_qwen3",
+        patch_voice(
+            DIALOGUE, None, "qwen3",
+            voice_params={
+                "mode": "qwen3_custom_voice",
+                "speaker": "Sohee",
+                "instruct": "Soft and warm.",
+                "language": "Korean",
+            },
+            output_prefix="standalone/tts_custom_voice_qwen3",
+        ),
+        manifest, [],
+    )
+    write_workflow(
+        "tts_voicebox_instruct_qwen3",
+        patch_voice(
+            DIALOGUE, None, "qwen3",
+            voice_params={
+                "mode": "qwen3_voicebox_instruct",
+                "speaker": "mai",
+                "instruct": "Energetic and clear.",
+                "language": "Korean",
+            },
+            output_prefix="standalone/tts_voicebox_instruct_qwen3",
+        ),
+        manifest, [],
+    )
+    write_workflow(
+        "tts_voicebox_clone_instruct_qwen3",
+        patch_voice(
+            DIALOGUE, str(assets["voicesample"]), "qwen3",
+            voice_params={
+                "mode": "qwen3_voicebox_clone_instruct",
+                "instruct": "Whisper-soft delivery.",
+                "language": "Korean",
+                "strategy": "embedded_encoder_with_ref_code",
+            },
+            output_prefix="standalone/tts_voicebox_clone_instruct_qwen3",
+        ),
+        manifest, ["voicesample.wav"],
     )
     write_workflow(
         "tts_clone_s2pro",
@@ -169,10 +243,37 @@ def main() -> None:
             "안녕하세요. Fish Audio S2 Pro 독립 실행 테스트입니다.",
             str(assets["voicesample"]),
             "s2pro",
+            voice_params={"mode": "s2pro_voice_clone"},
             output_prefix="standalone/tts_clone_s2pro",
         ),
-        manifest,
-        ["voicesample.wav"],
+        manifest, ["voicesample.wav"],
+    )
+
+    # ── VoiceBox 영구 등록 (morph) ────────────────────────────────────────
+    # 캐릭터 음색을 모델 ckpt 안에 named speaker 로 영구 등록 — 등록 후 위
+    # tts_voicebox_instruct_qwen3 가 ref 없이 호출 가능해진다.
+    # 모델 경로는 ComfyUI 가 cwd=ComfyUI/ 에서 resolve 하므로 project-root
+    # 기준 절대경로 대신 ComfyUI-relative ("models/Qwen3-TTS/...") 로 export.
+    voicebox_wf = patch_voicebox_register(
+        voice_sample_path=str(assets["voicesample"]),
+        target_speaker="standalone_char",
+        project_voicebox_path=project_voicebox_dir("standalone_demo"),
+        timbre_strength=0.72,
+        language="Korean",
+        verify_text="이 목소리는 모델에 영구 등록된 화자입니다.",
+        verify_prefix="standalone/voicebox_register_morph",
+    )
+    _COMFY_ROOT = ROOT / "ComfyUI"
+    for node in voicebox_wf.values():
+        inp = node.get("inputs", {})
+        for key in ("model_path", "output_model_path"):
+            v = inp.get(key)
+            if isinstance(v, str) and v.startswith(str(_COMFY_ROOT) + "/"):
+                inp[key] = v[len(str(_COMFY_ROOT) + "/"):]
+    write_workflow(
+        "voicebox_register_morph",
+        voicebox_wf,
+        manifest, ["voicesample.wav"],
     )
     write_workflow(
         "character_sprite_new",
@@ -199,16 +300,26 @@ def main() -> None:
         manifest,
         [],
     )
+    # patch_character_sprite_existing 은 VNCCS 의 CharacterCreator 가 사전
+    # 등록된 화자 enum 만 받는다 — 실제 myaniform 흐름은 Step1 → Step1.1 순으로
+    # 등록 후 호출되지만, standalone 사용자에게는 그 사전 등록이 없다. 그래서
+    # standalone 변형은 "create new" 모드로 노드를 재설정한다 (existing="None",
+    # new_character_name=<라벨>) — 첫 실행으로 캐릭터를 만들고 바로 클론.
+    sprite_ref_wf = patch_character_sprite_existing(
+        character_name="StandaloneClone",
+        description="adult woman, consistent face and body proportions",
+        reference_image_path=str(assets["character_sprite_ref"]),
+        negative_prompt="low quality, distorted anatomy, watermark",
+        character_fields={"sex": "female", "age": 24, "race": "human"},
+        output_prefix="standalone/character_sprite_reference",
+    )
+    for node in sprite_ref_wf.values():
+        if node.get("class_type") == "CharacterCreator":
+            node["inputs"]["existing_character"] = "None"
+            node["inputs"]["new_character_name"] = "StandaloneClone"
     write_workflow(
         "character_sprite_reference",
-        patch_character_sprite_existing(
-            character_name="StandaloneClone",
-            description="adult woman, consistent face and body proportions",
-            reference_image_path=str(assets["character_sprite_ref"]),
-            negative_prompt="low quality, distorted anatomy, watermark",
-            character_fields={"sex": "female", "age": 24, "race": "human"},
-            output_prefix="standalone/character_sprite_reference",
-        ),
+        sprite_ref_wf,
         manifest,
         ["character_sprite_ref.png"],
     )
@@ -239,6 +350,27 @@ def main() -> None:
         ),
         manifest,
         ["charref_0.png", "charref_1.png", "visualref_0.png"],
+    )
+    write_workflow(
+        "scene_image_sdxl",
+        patch_image(
+            prompt="1girl, brown bob, friendly, soft window light, anime style",
+            workflow="sdxl",
+            resolution=(832, 1216),
+            negative_prompt="low quality, watermark, bad anatomy",
+            output_prefix="standalone/scene_image_sdxl",
+        ),
+        manifest, [],
+    )
+    write_workflow(
+        "video_basic_i2v",
+        patch_video_basic(
+            image_path=str(assets["video_start"]),
+            bg_prompt="gentle camera drift, breathing motion, warm interior",
+            sfx_prompt="soft room tone, distant ambience",
+            output_prefix="standalone/video_basic_i2v",
+        ),
+        manifest, ["video_start.png"],
     )
     write_workflow(
         "video_lipsync_s2v_fastfidelity",

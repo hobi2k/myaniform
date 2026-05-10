@@ -1,0 +1,86 @@
+{
+  "prompt": {
+    "1": {
+      "class_type": "LoadAudio",
+      "inputs": {
+        "audio": "voicebox_ref.wav",
+        "upload": "audio"
+      },
+      "_meta": {
+        "title": "캐릭터 ref 오디오"
+      }
+    },
+    "2": {
+      "class_type": "Qwen3VoiceBoxMorphSpeaker",
+      "inputs": {
+        "model_path": "models/Qwen3-TTS/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        "target_speaker": "standalone_char",
+        "output_model_path": "models/Qwen3-TTS/voicebox/standalone_demo",
+        "update_in_place": false,
+        "language": "Korean",
+        "anchor_speaker": "auto",
+        "ref_audio": [
+          "1",
+          0
+        ],
+        "timbre_strength": 0.72,
+        "preserve_norm": true
+      },
+      "_meta": {
+        "title": "VoiceBox · 화자 등록 (standalone_char)"
+      }
+    },
+    "3": {
+      "class_type": "Qwen3Loader",
+      "inputs": {
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "sdpa",
+        "local_model_path": [
+          "2",
+          0
+        ]
+      },
+      "_meta": {
+        "title": "신규 voicebox 로더"
+      }
+    },
+    "4": {
+      "class_type": "Qwen3VoiceBoxInstruct",
+      "inputs": {
+        "model": [
+          "3",
+          0
+        ],
+        "speaker": [
+          "2",
+          1
+        ],
+        "text": "이 목소리는 모델에 영구 등록된 화자입니다.",
+        "seed": 42,
+        "language": "Korean",
+        "instruct": "",
+        "max_new_tokens": 1024,
+        "temperature": 0.85,
+        "top_p": 0.9
+      },
+      "_meta": {
+        "title": "등록 검증 합성"
+      }
+    },
+    "5": {
+      "class_type": "SaveAudio",
+      "inputs": {
+        "audio": [
+          "4",
+          0
+        ],
+        "filename_prefix": "standalone/voicebox_register_morph"
+      },
+      "_meta": {
+        "title": "검증 sample 저장"
+      }
+    }
+  }
+}

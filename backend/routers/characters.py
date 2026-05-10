@@ -22,6 +22,8 @@ from ..services.workflow_patcher import (
     patch_character_sheet,
     patch_character_sprite_existing,
     patch_voice_design,
+    patch_voicebox_register,
+    project_voicebox_dir,
 )
 
 UPLOAD_DIR = Path("uploads")
@@ -539,6 +541,7 @@ async def upload_voice(
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
     char.voice_sample_path = str(dest)
+    char.voice_source = "upload"
     session.add(char)
     session.commit()
     session.refresh(char)
@@ -578,6 +581,7 @@ async def design_voice(
 
     char.voice_design = voice_design
     char.voice_sample_path = str(dest)
+    char.voice_source = "design"
     session.add(char)
     session.commit()
     session.refresh(char)
@@ -609,6 +613,7 @@ async def design_voice_stream(
         shutil.copy(output, dest)
         char.voice_design = voice_design
         char.voice_sample_path = str(dest)
+        char.voice_source = "design"
         return char
 
     return await _run_character_workflow_stream(
@@ -617,6 +622,92 @@ async def design_voice_stream(
         kind="audio",
         execution_targets=None,
         success_message="보이스 디자인 생성 완료",
+        persist=persist,
+        session=session,
+    )
+
+
+# ── VoiceBox 화자 영구 등록 (morph) ─────────────────────────────────────────
+
+def _voicebox_register_target_speaker(char: Character) -> str:
+    """모델 ckpt 안 spk_id 사전의 키. 짧고 ASCII 만 — 한글/공백 회피.
+    char.id 의 앞 8자만 사용 — 한 프로젝트 내 충돌 가능성 사실상 0."""
+    return f"char_{char.id[:8]}"
+
+
+@router.post("/{char_id}/voice/voicebox/register", response_model=CharacterRead)
+async def voicebox_register(
+    project_id: str, char_id: str, body: dict | None = None,
+    session: Session = Depends(get_session),
+):
+    """캐릭터 보이스 샘플 (voice_sample_path) 을 Qwen3VoiceBoxMorphSpeaker 로
+    모델 ckpt 안에 named speaker 로 영구 등록한다. 결과:
+      - char.voicebox_checkpoint = 프로젝트 voicebox dir
+      - char.voicebox_speaker    = char_<id8>
+    이후 씬 인스펙터에서 `qwen3_voicebox_instruct` 모드 선택 시 ref_audio 없이
+    이 등록된 화자 이름으로 호출 — 클론 부담 0."""
+    char = _get_char(project_id, char_id, session)
+    if not char.voice_sample_path:
+        raise HTTPException(400, "캐릭터 음성 샘플이 먼저 필요합니다 (Voice Design 또는 WAV 업로드).")
+
+    body = body or {}
+    target = _voicebox_register_target_speaker(char)
+    out_dir = project_voicebox_dir(project_id)
+    wf = patch_voicebox_register(
+        voice_sample_path=char.voice_sample_path,
+        target_speaker=target,
+        project_voicebox_path=out_dir,
+        anchor_speaker=body.get("anchor_speaker", "auto"),
+        timbre_strength=float(body.get("timbre_strength", 0.72)),
+        language=char.voice_language or body.get("language", "Korean"),
+        verify_text=body.get("verify_text", char.voice_sample_text or "안녕하세요. 이 목소리는 모델에 영구 등록된 화자입니다."),
+        verify_prefix=f"projects/{project_id}/characters/{char_id}/voicebox_verify",
+    )
+    await run_workflow(wf, kind="audio")
+
+    char.voicebox_checkpoint = str(out_dir)
+    char.voicebox_speaker = target
+    session.add(char)
+    session.commit()
+    session.refresh(char)
+    return char
+
+
+@router.post("/{char_id}/voice/voicebox/register/stream")
+async def voicebox_register_stream(
+    project_id: str, char_id: str, body: dict | None = None,
+    session: Session = Depends(get_session),
+):
+    char = _get_char(project_id, char_id, session)
+    if not char.voice_sample_path:
+        raise HTTPException(400, "캐릭터 음성 샘플이 먼저 필요합니다.")
+    body = body or {}
+    target = _voicebox_register_target_speaker(char)
+    out_dir = project_voicebox_dir(project_id)
+    wf = patch_voicebox_register(
+        voice_sample_path=char.voice_sample_path,
+        target_speaker=target,
+        project_voicebox_path=out_dir,
+        anchor_speaker=body.get("anchor_speaker", "auto"),
+        timbre_strength=float(body.get("timbre_strength", 0.72)),
+        language=char.voice_language or body.get("language", "Korean"),
+        verify_text=body.get("verify_text", char.voice_sample_text or "안녕하세요."),
+        verify_prefix=f"projects/{project_id}/characters/{char_id}/voicebox_verify",
+    )
+
+    def persist(_output: Path) -> Character:
+        # morph 워크플로우의 SaveAudio 결과 (verify sample) 는 화면 미리듣기용으로만
+        # 사용 — 캐릭터 voice_sample_path 는 그대로 두고 ckpt + speaker 만 기록.
+        char.voicebox_checkpoint = str(out_dir)
+        char.voicebox_speaker = target
+        return char
+
+    return await _run_character_workflow_stream(
+        char=char,
+        workflow=wf,
+        kind="audio",
+        execution_targets=None,
+        success_message="VoiceBox 화자 등록 완료",
         persist=persist,
         session=session,
     )

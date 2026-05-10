@@ -61,6 +61,14 @@ _ADDITIVE_MIGRATIONS = [
     ("character", "voice_sample_text", "TEXT"),
     ("character", "voice_language",    "VARCHAR"),
     ("character", "voice_params",      "TEXT"),
+    # Voice source declared at character level — drives default scene mode
+    # picker. One of: design / upload / customvoice_preset / voicebox_path.
+    ("character", "voice_source",         "VARCHAR"),
+    # Built-in Qwen3 speaker preset for `customvoice_preset` source.
+    ("character", "voice_preset_speaker", "VARCHAR"),
+    # Optional fine-tuned VoiceBox checkpoint + speaker registered with it.
+    ("character", "voicebox_checkpoint",  "VARCHAR"),
+    ("character", "voicebox_speaker",     "VARCHAR"),
 ]
 
 

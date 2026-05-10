@@ -3,6 +3,19 @@
     "1": {
       "class_type": "Qwen3Loader",
       "inputs": {
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "sdpa",
+        "local_model_path": ""
+      },
+      "_meta": {
+        "title": "Loader · Qwen3-TTS-12Hz-1.7B-Base"
+      }
+    },
+    "2": {
+      "class_type": "Qwen3Loader",
+      "inputs": {
         "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
         "source": "HuggingFace",
         "precision": "bf16",
@@ -13,7 +26,7 @@
         "title": "Loader · Qwen3-TTS-12Hz-1.7B-CustomVoice"
       }
     },
-    "2": {
+    "3": {
       "class_type": "LoadAudio",
       "inputs": {
         "audio": "voicesample.wav",
@@ -23,38 +36,46 @@
         "title": "레퍼런스 오디오"
       }
     },
-    "3": {
-      "class_type": "Qwen3VoiceClone",
+    "4": {
+      "class_type": "Qwen3HybridCloneInstructPreset",
       "inputs": {
-        "model": [
+        "base_model": [
           "1",
+          0
+        ],
+        "custom_voice_model": [
+          "2",
           0
         ],
         "text": "안녕하세요. 독립 실행 워크플로우 테스트입니다.",
         "seed": 42,
         "language": "Korean",
-        "max_new_tokens": 2048,
-        "temperature": 0.9,
-        "top_p": 0.9,
-        "ref_audio_max_seconds": 30.0,
+        "instruct": "Calm, deliberate delivery.",
+        "speaker_anchor": "auto",
+        "customvoice_speaker": "",
+        "x_vector_only_mode": false,
+        "max_new_tokens": 1024,
+        "temperature": 0.8,
+        "top_p": 0.95,
+        "non_streaming_mode": false,
         "ref_text": "",
         "ref_audio": [
-          "2",
+          "3",
           0
         ]
       },
       "_meta": {
-        "title": "Voice Clone"
+        "title": "Hybrid Clone + Instruct (auto-anchor)"
       }
     },
-    "4": {
+    "5": {
       "class_type": "SaveAudio",
       "inputs": {
         "audio": [
-          "3",
-          0
+          "4",
+          1
         ],
-        "filename_prefix": "standalone/tts_clone_qwen3"
+        "filename_prefix": "standalone/tts_hybrid_qwen3"
       },
       "_meta": {
         "title": "음성 저장"

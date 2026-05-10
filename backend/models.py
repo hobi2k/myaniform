@@ -92,11 +92,21 @@ class Character(SQLModel, table=True):
     sprite_path:  Optional[str] = None   # VN_Step4 결과: 투명 배경 스프라이트
 
     # 목소리
+    # voice_source: 캐릭터 음성을 어떻게 마련했는지의 선언적 라벨.
+    # "design"  — voice_design 텍스트로 Qwen3DirectedClone 합성된 WAV (voice_sample_path 채워짐)
+    # "upload"  — 외부 WAV 업로드 (voice_sample_path 채워짐)
+    # "customvoice_preset" — Qwen3 빌트인 화자(예: Vivian) 사용. WAV 없음.
+    # "voicebox_path"      — 직접 fine-tune 한 voicebox 체크포인트 + speaker. 고급 사용자.
+    # 씬 인스펙터는 이 값을 보고 모드 picker 의 기본값을 결정.
+    voice_source:      Optional[str] = None
     voice_design:      Optional[str] = None  # Voice Design 텍스트 설명
     voice_sample_path: Optional[str] = None  # 생성/업로드된 WAV
     voice_sample_text: Optional[str] = None
     voice_language: Optional[str] = None
-    voice_params: Optional[str] = None       # JSON VoiceGenParams
+    voice_params: Optional[str] = None       # JSON VoiceGenParams (캐릭터 보이스 *생성* 시 하이퍼파라미터)
+    voice_preset_speaker: Optional[str] = None   # voice_source=customvoice_preset 일 때 화자 이름
+    voicebox_checkpoint:  Optional[str] = None   # voice_source=voicebox_path 일 때 ckpt 디렉터리
+    voicebox_speaker:     Optional[str] = None   # 해당 ckpt 안의 speaker 이름
     tts_engine:        TTSEngine = TTSEngine.qwen3
 
 
@@ -128,12 +138,16 @@ class CharacterRead(SQLModel):
     sprite_params:     Optional[str]
     image_path:        Optional[str]
     sprite_path:       Optional[str]
-    voice_design:      Optional[str]
-    voice_sample_path: Optional[str]
-    voice_sample_text: Optional[str]
-    voice_language:    Optional[str]
-    voice_params:      Optional[str]
-    tts_engine:        TTSEngine
+    voice_source:        Optional[str] = None
+    voice_design:        Optional[str]
+    voice_sample_path:   Optional[str]
+    voice_sample_text:   Optional[str]
+    voice_language:      Optional[str]
+    voice_params:        Optional[str]
+    voice_preset_speaker: Optional[str] = None
+    voicebox_checkpoint:  Optional[str] = None
+    voicebox_speaker:     Optional[str] = None
+    tts_engine:          TTSEngine
 
 
 # ── Scene ─────────────────────────────────────────────────────────────────

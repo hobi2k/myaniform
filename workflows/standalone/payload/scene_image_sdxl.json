@@ -215,7 +215,7 @@
       "inputs": {
         "action": "append",
         "tidy_tags": "yes",
-        "text_a": "Picture 1 shows (Heroine) adult woman, long brown hair, amber eyes. Picture 2 shows (Hero) adult man, short black hair, calm expression. Both characters appear together in the same scene. cinematic bedroom conversation, two characters sitting close together, warm practical lighting, controlled composition, expressive faces",
+        "text_a": "1girl, brown bob, friendly, soft window light, anime style",
         "text_b": "",
         "text_c": ""
       },
@@ -238,7 +238,7 @@
     "10": {
       "class_type": "Simple Text 💬ED",
       "inputs": {
-        "text": "low quality, watermark, different character, bad anatomy"
+        "text": "low quality, watermark, bad anatomy"
       },
       "_meta": {
         "title": "부정값 노드 💬ED"
@@ -326,8 +326,8 @@
       "class_type": "FaceDetailer",
       "inputs": {
         "image": [
-          "35",
-          0
+          "5",
+          1
         ],
         "model": [
           "6",
@@ -584,8 +584,8 @@
           0
         ],
         "image_b": [
-          "35",
-          0
+          "5",
+          1
         ]
       },
       "_meta": {
@@ -635,231 +635,10 @@
           "2",
           0
         ],
-        "filename_prefix": "standalone/scene_image_qwen_edit"
+        "filename_prefix": "standalone/scene_image_sdxl"
       },
       "_meta": {
         "title": "SaveImage"
-      }
-    },
-    "22": {
-      "class_type": "LoadImage",
-      "inputs": {
-        "image": "charref_0.png"
-      },
-      "_meta": {
-        "title": "Qwen 캐릭터 레퍼런스 1"
-      }
-    },
-    "23": {
-      "class_type": "LoadImage",
-      "inputs": {
-        "image": "charref_1.png"
-      },
-      "_meta": {
-        "title": "Qwen 캐릭터 레퍼런스 2"
-      }
-    },
-    "24": {
-      "class_type": "LoadImage",
-      "inputs": {
-        "image": "visualref_0.png"
-      },
-      "_meta": {
-        "title": "Qwen 캐릭터 레퍼런스 3"
-      }
-    },
-    "25": {
-      "class_type": "CLIPLoader",
-      "inputs": {
-        "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
-        "type": "qwen_image",
-        "device": "default"
-      },
-      "_meta": {
-        "title": "Qwen 2.5 VL Text Encoder"
-      }
-    },
-    "26": {
-      "class_type": "VAELoader",
-      "inputs": {
-        "vae_name": "qwen_image_vae.safetensors"
-      },
-      "_meta": {
-        "title": "Qwen Image VAE"
-      }
-    },
-    "27": {
-      "class_type": "UnetLoaderGGUF",
-      "inputs": {
-        "unet_name": "qwen-image-edit-2511-Q5_0.gguf"
-      },
-      "_meta": {
-        "title": "Qwen Image Edit (GGUF Q5_0)"
-      }
-    },
-    "28": {
-      "class_type": "LoraLoader",
-      "inputs": {
-        "model": [
-          "27",
-          0
-        ],
-        "clip": [
-          "25",
-          0
-        ],
-        "lora_name": "qwen/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
-        "strength_model": 1.0,
-        "strength_clip": 1.0
-      },
-      "_meta": {
-        "title": "Lightning 4-step distill LoRA"
-      }
-    },
-    "29": {
-      "class_type": "LoraLoader",
-      "inputs": {
-        "model": [
-          "28",
-          0
-        ],
-        "clip": [
-          "28",
-          1
-        ],
-        "lora_name": "qwen/VNCCS/poser_helper_v2_000004200.safetensors",
-        "strength_model": 1.0,
-        "strength_clip": 1.0
-      },
-      "_meta": {
-        "title": "Pose transfer LoRA"
-      }
-    },
-    "30": {
-      "class_type": "LoraLoader",
-      "inputs": {
-        "model": [
-          "29",
-          0
-        ],
-        "clip": [
-          "29",
-          1
-        ],
-        "lora_name": "qwen/VNCCS/ClothesHelperUltimateV1_000005100.safetensors",
-        "strength_model": 0.8,
-        "strength_clip": 1.0
-      },
-      "_meta": {
-        "title": "Clothes preserve LoRA"
-      }
-    },
-    "31": {
-      "class_type": "TextEncodeQwenImageEditPlus",
-      "inputs": {
-        "clip": [
-          "30",
-          1
-        ],
-        "vae": [
-          "26",
-          0
-        ],
-        "prompt": "Picture 1 shows (Heroine) adult woman, long brown hair, amber eyes. Picture 2 shows (Hero) adult man, short black hair, calm expression. Both characters appear together in the same scene. cinematic bedroom conversation, two characters sitting close together, warm practical lighting, controlled composition, expressive faces",
-        "image1": [
-          "22",
-          0
-        ],
-        "image2": [
-          "23",
-          0
-        ],
-        "image3": [
-          "24",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "Qwen Positive (참조 일관성)"
-      }
-    },
-    "32": {
-      "class_type": "TextEncodeQwenImageEditPlus",
-      "inputs": {
-        "clip": [
-          "30",
-          1
-        ],
-        "vae": [
-          "26",
-          0
-        ],
-        "prompt": "low quality, watermark, different character, bad anatomy"
-      },
-      "_meta": {
-        "title": "Qwen Negative"
-      }
-    },
-    "33": {
-      "class_type": "EmptyQwenImageLayeredLatentImage",
-      "inputs": {
-        "width": 832,
-        "height": 1216,
-        "layers": 4,
-        "batch_size": 1
-      },
-      "_meta": {
-        "title": "Qwen 레퍼런스 latent"
-      }
-    },
-    "34": {
-      "class_type": "KSamplerAdvanced",
-      "inputs": {
-        "model": [
-          "30",
-          0
-        ],
-        "positive": [
-          "31",
-          0
-        ],
-        "negative": [
-          "32",
-          0
-        ],
-        "latent_image": [
-          "33",
-          0
-        ],
-        "add_noise": "enable",
-        "noise_seed": 0,
-        "control_after_generate": "randomize",
-        "steps": 4,
-        "cfg": 1.0,
-        "sampler_name": "euler",
-        "scheduler": "simple",
-        "start_at_step": 0,
-        "end_at_step": 10000,
-        "return_with_leftover_noise": "disable"
-      },
-      "_meta": {
-        "title": "Qwen KSampler"
-      }
-    },
-    "35": {
-      "class_type": "VAEDecode",
-      "inputs": {
-        "samples": [
-          "34",
-          0
-        ],
-        "vae": [
-          "26",
-          0
-        ]
-      },
-      "_meta": {
-        "title": "Qwen VAE Decode"
       }
     }
   }

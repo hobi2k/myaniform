@@ -256,7 +256,7 @@
   "22": {
     "class_type": "CharacterCreator",
     "inputs": {
-      "existing_character": "StandaloneClone",
+      "existing_character": "None",
       "background_color": "green",
       "aesthetics": "masterpiece",
       "nsfw": false,
@@ -272,7 +272,7 @@
       "seed": 1125899906842624,
       "negative_prompt": "fixed, low quality, distorted anatomy, watermark",
       "lora_prompt": "bad quality,worst quality,worst detail,sketch,censor, missing arm, missing leg, distorted body",
-      "new_character_name": ""
+      "new_character_name": "StandaloneClone"
     },
     "_meta": {
       "title": "CharacterCreator"

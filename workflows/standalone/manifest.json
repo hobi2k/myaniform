@@ -17,6 +17,47 @@
       "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_clone_qwen3.json"
     },
     {
+      "name": "tts_clone_instruct_qwen3",
+      "api_prompt": "workflows/standalone/api/tts_clone_instruct_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/tts_clone_instruct_qwen3.json",
+      "required_inputs": [
+        "voicesample.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_clone_instruct_qwen3.json"
+    },
+    {
+      "name": "tts_hybrid_qwen3",
+      "api_prompt": "workflows/standalone/api/tts_hybrid_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/tts_hybrid_qwen3.json",
+      "required_inputs": [
+        "voicesample.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_hybrid_qwen3.json"
+    },
+    {
+      "name": "tts_custom_voice_qwen3",
+      "api_prompt": "workflows/standalone/api/tts_custom_voice_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/tts_custom_voice_qwen3.json",
+      "required_inputs": [],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_custom_voice_qwen3.json"
+    },
+    {
+      "name": "tts_voicebox_instruct_qwen3",
+      "api_prompt": "workflows/standalone/api/tts_voicebox_instruct_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/tts_voicebox_instruct_qwen3.json",
+      "required_inputs": [],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_voicebox_instruct_qwen3.json"
+    },
+    {
+      "name": "tts_voicebox_clone_instruct_qwen3",
+      "api_prompt": "workflows/standalone/api/tts_voicebox_clone_instruct_qwen3.json",
+      "prompt_payload": "workflows/standalone/payload/tts_voicebox_clone_instruct_qwen3.json",
+      "required_inputs": [
+        "voicesample.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_voicebox_clone_instruct_qwen3.json"
+    },
+    {
       "name": "tts_clone_s2pro",
       "api_prompt": "workflows/standalone/api/tts_clone_s2pro.json",
       "prompt_payload": "workflows/standalone/payload/tts_clone_s2pro.json",
@@ -24,6 +65,15 @@
         "voicesample.wav"
       ],
       "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/tts_clone_s2pro.json"
+    },
+    {
+      "name": "voicebox_register_morph",
+      "api_prompt": "workflows/standalone/api/voicebox_register_morph.json",
+      "prompt_payload": "workflows/standalone/payload/voicebox_register_morph.json",
+      "required_inputs": [
+        "voicesample.wav"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/voicebox_register_morph.json"
     },
     {
       "name": "character_sprite_new",
@@ -51,6 +101,22 @@
         "visualref_0.png"
       ],
       "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/scene_image_qwen_edit.json"
+    },
+    {
+      "name": "scene_image_sdxl",
+      "api_prompt": "workflows/standalone/api/scene_image_sdxl.json",
+      "prompt_payload": "workflows/standalone/payload/scene_image_sdxl.json",
+      "required_inputs": [],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/scene_image_sdxl.json"
+    },
+    {
+      "name": "video_basic_i2v",
+      "api_prompt": "workflows/standalone/api/video_basic_i2v.json",
+      "prompt_payload": "workflows/standalone/payload/video_basic_i2v.json",
+      "required_inputs": [
+        "video_start.png"
+      ],
+      "submit": "curl -s http://127.0.0.1:8188/prompt -H 'Content-Type: application/json' --data-binary @payload/video_basic_i2v.json"
     },
     {
       "name": "video_lipsync_s2v_fastfidelity",

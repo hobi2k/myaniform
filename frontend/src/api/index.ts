@@ -105,6 +105,18 @@ export const api = {
         body: JSON.stringify({ voice_design: voiceDesign }),
       }),
 
+    /** Qwen3VoiceBoxMorphSpeaker 로 캐릭터 보이스를 모델 ckpt 안에 named
+     *  speaker 로 영구 등록한다. 이후 씬에서 ref audio 없이 호출 가능. */
+    registerVoicebox: (
+      projectId: string,
+      charId: string,
+      body: { anchor_speaker?: string; timbre_strength?: number; verify_text?: string } = {},
+    ) =>
+      request<Character>(`/projects/${projectId}/characters/${charId}/voice/voicebox/register`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
     // Phase 4: VNCCS 캐릭터 스프라이트
     generateSprite: (projectId: string, charId: string, mode: "auto" | "new" | "reference" = "auto") =>
       request<Character>(`/projects/${projectId}/characters/${charId}/sprite/generate?mode=${mode}`, {

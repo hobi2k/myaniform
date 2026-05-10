@@ -213,13 +213,48 @@ def _build_voice_workflow_for_scene(
     chars = _scene_characters(s, session)
     character = chars[0] if chars else None
 
+    # Inherit character voice as the source. Character builds the voice once
+    # (Voice Design or upload → optional voicebox registration), and every
+    # scene consumes that source.
+    voice_params = _parse_json(s.voice_params) or {}
+    if character:
+        mode = voice_params.get("mode") or ""
+
+        # 등록된 캐릭터에 모드가 비어 있으면 voicebox_instruct 가 기본 — ref 없이
+        # 즉시 호출, 클론 부담 0. tts_engine 이 s2pro 인 경우는 그쪽 흐름 유지.
+        if (not mode
+                and character.voicebox_speaker
+                and character.voicebox_checkpoint
+                and s.tts_engine.value != "s2pro"):
+            mode = "qwen3_voicebox_instruct"
+            voice_params["mode"] = mode
+
+        # voicebox 등록된 캐릭터: 모든 voicebox / custom_voice 모드의 ckpt 슬롯에
+        # 등록 결과 디렉터리를 넣어 같은 모델에서 named speaker 호출이 가능.
+        if character.voicebox_checkpoint and not voice_params.get("voicebox_checkpoint"):
+            if mode in {
+                "qwen3_voicebox_instruct",
+                "qwen3_voicebox_clone_instruct",
+                "qwen3_custom_voice",
+            }:
+                voice_params["voicebox_checkpoint"] = character.voicebox_checkpoint
+
+        # Speaker 이름 자동 채움.
+        if mode == "qwen3_voicebox_instruct" and not voice_params.get("speaker") and character.voicebox_speaker:
+            voice_params["speaker"] = character.voicebox_speaker
+        if mode == "qwen3_custom_voice" and not voice_params.get("speaker"):
+            # 등록된 캐릭터 화자 우선, 없으면 voice_preset_speaker (legacy DB 컬럼).
+            voice_params["speaker"] = (
+                character.voicebox_speaker or character.voice_preset_speaker or voice_params.get("speaker")
+            )
+
     wf = patch_voice(
         dialogue=s.dialogue,
         voice_sample=character.voice_sample_path if character else None,
         tts_engine=s.tts_engine.value,
         voice_design_text=character.voice_design if character else None,
         output_prefix=f"projects/{project_id}/scenes/{scene_id}/voice",
-        voice_params=_parse_json(s.voice_params) or None,
+        voice_params=voice_params or None,
     )
     return s, wf
 

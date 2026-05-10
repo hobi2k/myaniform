@@ -24,86 +24,11 @@
         "title": "PathchSageAttentionKJ"
       }
     },
-    "1": {
-      "class_type": "TorchCompileModelWanVideoV2",
-      "inputs": {
-        "model": [
-          "2",
-          0
-        ],
-        "backend": "inductor",
-        "fullgraph": false,
-        "mode": "default",
-        "dynamic": false,
-        "compile_transformer_blocks_only": true,
-        "dynamo_cache_size_limit": 64,
-        "force_parameter_static_shapes": true
-      },
-      "_meta": {
-        "title": "TorchCompileModelWanVideoV2"
-      }
-    },
     "4": {
       "class_type": "ModelSamplingSD3",
       "inputs": {
         "model": [
-          "1",
-          0
-        ],
-        "shift": 5.0
-      },
-      "_meta": {
-        "title": "ModelSamplingSD3"
-      }
-    },
-    "7": {
-      "class_type": "UNETLoader",
-      "inputs": {
-        "unet_name": "wan_s2v/DasiwaWan2214BS2V_littledemonV2.safetensors",
-        "weight_dtype": "fp8_e4m3fn_fast"
-      },
-      "_meta": {
-        "title": "UNETLoader"
-      }
-    },
-    "6": {
-      "class_type": "PathchSageAttentionKJ",
-      "inputs": {
-        "model": [
-          "7",
-          0
-        ],
-        "sage_attention": "auto",
-        "allow_compile": false
-      },
-      "_meta": {
-        "title": "PathchSageAttentionKJ"
-      }
-    },
-    "5": {
-      "class_type": "TorchCompileModelWanVideoV2",
-      "inputs": {
-        "model": [
-          "6",
-          0
-        ],
-        "backend": "inductor",
-        "fullgraph": false,
-        "mode": "default",
-        "dynamic": false,
-        "compile_transformer_blocks_only": true,
-        "dynamo_cache_size_limit": 64,
-        "force_parameter_static_shapes": true
-      },
-      "_meta": {
-        "title": "TorchCompileModelWanVideoV2"
-      }
-    },
-    "8": {
-      "class_type": "ModelSamplingSD3",
-      "inputs": {
-        "model": [
-          "5",
+          "2",
           0
         ],
         "shift": 5.0
@@ -125,7 +50,7 @@
     "14": {
       "class_type": "CLIPTextEncode",
       "inputs": {
-        "text": "subtle mouth movement, intimate close-up, warm room lighting",
+        "text": "subtle mouth movement, intimate close-up, warm room lighting. Audio-driven character performance: synchronize mouth movement, blinking, gaze shifts, head turns, shoulder posture, hand gestures, breathing, weight shifts, and emotional timing to the spoken line and sound effects. This must be a performed scene, not a static talking-head shot and not lips-only animation. Preserve the exact character identity from the input frame: same face shape, eye shape, hair color, hairstyle, outfit, body silhouette, and relative positions. Do not redesign, recast, age-shift, change clothes, or introduce a different person",
         "clip": [
           "41",
           0
@@ -138,7 +63,7 @@
     "23": {
       "class_type": "CLIPTextEncode",
       "inputs": {
-        "text": "watermark, channel logo, vivid/saturated tones, overexposed, static, blurry, subtitles, text, artwork, painting, still frame, worst quality, low quality, jpeg artifacts, ugly, damaged hands, poorly drawn face, deformity, disfigured, malformed limbs, fused fingers, frozen frame, cluttered background",
+        "text": "watermark, channel logo, vivid/saturated tones, overexposed, static, blurry, subtitles, text, artwork, painting, still frame, worst quality, low quality, jpeg artifacts, ugly, damaged hands, poorly drawn face, deformity, disfigured, malformed limbs, fused fingers, frozen frame, cluttered background, different character, different face, changed hairstyle, changed outfit, static body, frozen pose, only lips moving, lips-only animation, disconnected voice, off-beat gestures, mismatched audio rhythm, unmoving shoulders, dead eyes, mannequin motion, different character, changed face, changed hairstyle, changed hair color, changed outfit, new person, inconsistent identity, inconsistent body, recast character",
         "clip": [
           "41",
           0
@@ -293,7 +218,7 @@
       "class_type": "KSamplerAdvanced",
       "inputs": {
         "model": [
-          "8",
+          "4",
           0
         ],
         "positive": [
@@ -351,13 +276,14 @@
         ],
         "frame_rate": 16,
         "loop_count": 0,
+        "filename_prefix": "standalone/video_lipsync_s2v_fastfidelity",
         "format": "video/h264-mp4",
         "pix_fmt": "yuv420p",
         "crf": 19,
-        "pingpong": false,
+        "save_metadata": true,
         "trim_to_audio": false,
-        "save_output": true,
-        "filename_prefix": "standalone/video_lipsync_s2v_fastfidelity"
+        "pingpong": false,
+        "save_output": true
       },
       "_meta": {
         "title": "VHS_VideoCombine"
