@@ -31,6 +31,8 @@ _ADDITIVE_MIGRATIONS = [
     ("scene", "out_transition_style","VARCHAR"),
     ("scene", "out_transition_sec",  "REAL"),
     ("scene", "clip_color_overlay",  "VARCHAR"),
+    # TTS mode + per-mode params (Qwen3 expanded mode set)
+    ("scene", "voice_params",        "TEXT"),
     # Composer M4 — Project BGM
     ("project", "bgm_path",          "VARCHAR"),
     ("project", "measured_lufs",     "REAL"),

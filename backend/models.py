@@ -174,6 +174,15 @@ class Scene(SQLModel, table=True):
     # lipsync 전용
     dialogue:     Optional[str] = None
     tts_engine:   TTSEngine = TTSEngine.qwen3
+    # voice_params JSON: per-mode TTS settings.
+    #   {"mode": "qwen3_base_custom_voice_clone_instruct",
+    #    "instruct": "...", "speaker": "Vivian", "ref_text": "...",
+    #    "language": "Korean", "x_vector_only_mode": false,
+    #    "temperature": 0.9, "top_p": 0.9, "max_new_tokens": 2048,
+    #    "seed": 42, "voice_design_text": "..."}
+    # The "mode" field is the discriminator — the rest are mode-specific.
+    # See backend/services/voice_modes.py for the full mode catalog.
+    voice_params: Optional[str] = None
 
     # effect 전용
     effect_prompt: Optional[str] = None
@@ -225,6 +234,7 @@ class SceneCreate(SQLModel):
     video_params:       Optional[str] = None
     dialogue:           Optional[str] = None
     tts_engine:         TTSEngine = TTSEngine.qwen3
+    voice_params:       Optional[str] = None
     effect_prompt:      Optional[str] = None
     loras_json:         Optional[str] = None
     diffusion_model:    Optional[str] = None
@@ -247,6 +257,7 @@ class SceneRead(SQLModel):
     video_params:       Optional[str]
     dialogue:           Optional[str]
     tts_engine:         TTSEngine
+    voice_params:       Optional[str] = None
     effect_prompt:      Optional[str]
     loras_json:         Optional[str]
     diffusion_model:    Optional[str]

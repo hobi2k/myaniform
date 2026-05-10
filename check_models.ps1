@@ -63,6 +63,22 @@ Write-Host ""
 Write-Host "-- LoRA ---------------------------------------------------------"
 Check "SmoothMix Animation LoRA"           "$MODELS\loras\wan_smoothmix\*.safetensors"
 Check-Optional "AniEffect LoRA"            "$MODELS\loras\wan_anieffect\*.safetensors"
+# 영상 워크플로우 originals 가 참조하는 옵션 LoRA — 없어도 빈 슬롯이라 동작함
+Check-Optional "Wan2.1 lightx2v cfg/step distill (rank64)" `
+    "$MODELS\loras\wan_smoothmix\Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+Check-Optional "Wan2.2 HIGH lightx2v MoE distill (rank64)" `
+    "$MODELS\loras\wan_smoothmix\Wan_2_2_I2V_A14B_HIGH_lightx2v_MoE_distill_lora_rank_64_bf_16.safetensors"
+Check-Optional "lightx2v I2V 14B 480p distill (rank128)" `
+    "$MODELS\loras\wan_smoothmix\lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
+Check-Optional "smoothMixWan 22-14B I2V high"             "$MODELS\loras\wan_smoothmix\smoothMixWan2214BI2V_i2vHigh.safetensors"
+Check-Optional "smoothMixWan 22 I2V/T2V high"             "$MODELS\loras\wan_smoothmix\smoothMixWan22I2VT2V_i2vHigh.safetensors"
+# 디테일러 LoRA (옵션)
+Check-Optional "Detailer add-detail-xl"                   "$MODELS\loras\detailer\add-detail-xl.safetensors"
+Check-Optional "Detailer AddMicroDetails Illustrious"     "$MODELS\loras\detailer\AddMicroDetails_Illustrious_v5.safetensors"
+Check-Optional "Detailer AddMicroDetails NoobAI"          "$MODELS\loras\detailer\AddMicroDetails_NoobAI_v4.safetensors"
+Check-Optional "Detailer cfg_scale_boost"                 "$MODELS\loras\detailer\cfg_scale_boost.safetensors"
+Check-Optional "Detailer XDetail_heavy"                   "$MODELS\loras\detailer\XDetail_heavy.safetensors"
+Check-Optional "Detailer XDetail_light"                   "$MODELS\loras\detailer\XDetail_light.safetensors"
 
 Write-Host ""
 Write-Host "-- TTS (gated / 특수) -------------------------------------------"

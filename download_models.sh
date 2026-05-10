@@ -449,6 +449,30 @@ download_civitai() {
     civitai_dl "2695694" "$MODELS/loras/wan_smoothmix" "SmoothMix_illustrious.safetensors"
 
     echo ""
+    echo "━━━ Wan Video 가속/품질 LoRA (lightx2v + smoothmix Wan) ━━━━"
+    # workflows/originals 의 동영상 워크플로우들이 참조 — myaniform 이 만든
+    # standalone 페이로드는 Power Lora Loader 슬롯을 비워두므로 사용자가 UI 에서
+    # 선택할 때만 활성화. 모두 옵션이지만 영상 품질에 직결되니 기본 다운로드.
+    # lightx2v: I2V cfg/step distill — 적은 step 으로 동등 품질.
+    # 두 LoRA 는 Kijai/WanVideo_comfy 미러에 평탄하게 들어가 있어 hf_dl 한번에 받음.
+    hf_dl "Kijai/WanVideo_comfy" \
+          "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors" \
+          "$MODELS/loras/wan_smoothmix"
+    hf_dl "Kijai/WanVideo_comfy" \
+          "Wan_2_2_I2V_A14B_HIGH_lightx2v_MoE_distill_lora_rank_64_bf_16.safetensors" \
+          "$MODELS/loras/wan_smoothmix"
+    hf_dl "Kijai/WanVideo_comfy" \
+          "lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" \
+          "$MODELS/loras/wan_smoothmix"
+    # smoothMix Wan 변형 — Civitai 에서 model id 확인되면 받음. 둘 다 model 페이지
+    # 비공개일 수 있으므로 외부 우선 fallback (StabilityMatrix 의 기존 받은 파일).
+    local SM_WAN="/mnt/d/Stable Diffusion/StabilityMatrix-win-x64/Data/Packages/ComfyUI/models/loras/wan_smoothmix"
+    external_or_civitai_dl "$SM_WAN/smoothMixWan2214BI2V_i2vHigh.safetensors" \
+        "" "$MODELS/loras/wan_smoothmix" "smoothMixWan2214BI2V_i2vHigh.safetensors"
+    external_or_civitai_dl "$SM_WAN/smoothMixWan22I2VT2V_i2vHigh.safetensors" \
+        "" "$MODELS/loras/wan_smoothmix" "smoothMixWan22I2VT2V_i2vHigh.safetensors"
+
+    echo ""
     echo "━━━ Detailer / Quality LoRA (외부 우선, Civitai fallback) ━━"
     # 사용자의 StabilityMatrix 폴더에 이미 받아둔 파일이 있으면 거기를 심링크.
     # 외부에도 없고 vid 도 있으면 Civitai 에서 받아옴. NAI_vpred_fix / sdxl_enhance

@@ -107,6 +107,145 @@ export interface ImageParams {
   qwen_end_at_step?: number;
 }
 
+/**
+ * VoiceParams — per-scene TTS settings, stored in `Scene.voice_params` JSON.
+ * The `mode` discriminates which Qwen3 / S2-Pro node graph the backend builds.
+ * Other fields are mode-specific; backend builders read what they need and
+ * ignore the rest, so the editor can keep all knobs in one flat object.
+ */
+export type VoiceMode =
+  | "qwen3_voice_design"
+  | "qwen3_custom_voice"
+  | "qwen3_voice_clone"
+  | "qwen3_base_custom_voice_clone_instruct"
+  | "qwen3_directed_clone_from_voice_design"
+  | "qwen3_hybrid_clone_instruct_preset"
+  | "qwen3_voicebox_instruct"
+  | "qwen3_voicebox_clone_instruct"
+  | "s2pro_voice_design"
+  | "s2pro_voice_clone";
+
+export const QWEN3_CUSTOM_VOICE_SPEAKERS = [
+  "Vivian", "Serena", "Uncle_Fu", "Dylan", "Eric",
+  "Ryan", "Aiden", "Ono_Anna", "Sohee",
+] as const;
+
+export const VOICE_MODE_OPTIONS: ReadonlyArray<{
+  id: VoiceMode;
+  label: string;
+  family: "qwen3_native" | "qwen3_voicebox" | "s2pro";
+  needsRefAudio: boolean;
+  needsSpeakerPreset: boolean;
+  needsDesignText: boolean;
+  description: string;
+}> = [
+  {
+    id: "qwen3_voice_design",
+    label: "Voice Design (텍스트 묘사)",
+    family: "qwen3_native",
+    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: true,
+    description: "레퍼런스 음성 없이 instruct 만으로 음색 합성.",
+  },
+  {
+    id: "qwen3_custom_voice",
+    label: "Custom Voice (프리셋 화자 + instruct)",
+    family: "qwen3_native",
+    needsRefAudio: false, needsSpeakerPreset: true, needsDesignText: false,
+    description: "Vivian/Serena/Sohee 등 9개 빌트인 화자 선택, instruct 로 톤 조절.",
+  },
+  {
+    id: "qwen3_voice_clone",
+    label: "Voice Clone (레퍼런스 음성)",
+    family: "qwen3_native",
+    needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
+    description: "캐릭터 보이스 샘플 한 개로 클론. ref_text 주면 더 정확.",
+  },
+  {
+    id: "qwen3_base_custom_voice_clone_instruct",
+    label: "Base + CustomVoice · Clone + Instruct",
+    family: "qwen3_native",
+    needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
+    description: "Base + CustomVoice 두 모델 + 클론 + instruct + (옵션) x_vector_only_mode 풀 옵션.",
+  },
+  {
+    id: "qwen3_directed_clone_from_voice_design",
+    label: "Directed Clone from Voice Design (3-model)",
+    family: "qwen3_native",
+    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: true,
+    description: "VoiceDesign + Base + CustomVoice 3-model. instruct 만으로 시드 보이스 → 클론 — ref 불필요.",
+  },
+  {
+    id: "qwen3_hybrid_clone_instruct_preset",
+    label: "Hybrid Clone + Instruct + Preset (auto-anchor)",
+    family: "qwen3_native",
+    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: false,
+    description: "ref / 프리셋 화자 / 저장된 prompt 중 가용한 것을 자동 선택 — 가장 유연.",
+  },
+  {
+    id: "qwen3_voicebox_instruct",
+    label: "VoiceBox + Instruct (named speaker)",
+    family: "qwen3_voicebox",
+    needsRefAudio: false, needsSpeakerPreset: true, needsDesignText: false,
+    description: "사전학습 voicebox 의 named speaker(예: 'mai') + instruct.",
+  },
+  {
+    id: "qwen3_voicebox_clone_instruct",
+    label: "VoiceBox · Clone + Instruct",
+    family: "qwen3_voicebox",
+    needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
+    description: "Voicebox 모델로 ref audio 클론 + instruct. strategy 선택 가능.",
+  },
+  {
+    id: "s2pro_voice_design",
+    label: "S2 Pro · Voice Design",
+    family: "s2pro",
+    needsRefAudio: false, needsSpeakerPreset: false, needsDesignText: true,
+    description: "Fish S2-Pro 텍스트 기반 voice design.",
+  },
+  {
+    id: "s2pro_voice_clone",
+    label: "S2 Pro · Voice Clone",
+    family: "s2pro",
+    needsRefAudio: true, needsSpeakerPreset: false, needsDesignText: false,
+    description: "Fish S2-Pro 의 zero-shot 보이스 클론.",
+  },
+];
+
+export interface VoiceParams {
+  mode?: VoiceMode;
+  /** Free-form vocal direction passed to nodes that have an `instruct` slot. */
+  instruct?: string;
+  /** Built-in speaker name (Qwen3CustomVoice / VoiceBoxInstruct / VoiceBoxClone). */
+  speaker?: string;
+  /** Custom speaker label saved into the model when registering a new voice. */
+  custom_speaker_name?: string;
+  /** Reference text matching the ref audio — helps clone fidelity. */
+  ref_text?: string;
+  /** Seed utterance the design pass uses to compute the voice. */
+  design_text?: string;
+  /** Override clone instruct (separate from the design pass). */
+  clone_instruct?: string;
+  /** Auto-anchor preference for HybridCloneInstructPreset. */
+  speaker_anchor?: string;
+  /** Saved CustomVoice speaker label for hybrid mode. */
+  customvoice_speaker?: string;
+  /** Voicebox clone strategy (e.g. "embedded_encoder_with_ref_code"). */
+  strategy?: string;
+  /** Language hint — "Auto" lets the model detect from the text. */
+  language?: string;
+  /** Sampler knobs — leave undefined to use mode defaults. */
+  temperature?: number;
+  top_p?: number;
+  max_new_tokens?: number;
+  seed?: number;
+  /** Cap reference clip length sent into the encoder. */
+  ref_audio_max_seconds?: number;
+  /** Use only x-vector projection from the ref instead of full conditioning. */
+  x_vector_only_mode?: boolean;
+  /** Disable streaming for hybrid/voicebox-clone modes. */
+  non_streaming_mode?: boolean;
+}
+
 export interface VideoParams {
   steps?: number;
   cfg?: number;
@@ -175,6 +314,7 @@ export interface Scene {
   // 기타
   dialogue: string | null;
   tts_engine: TTSEngine;
+  voice_params: string | null;          // JSON VoiceParams
   effect_prompt: string | null;
   loras_json: string | null;
   diffusion_model: string | null;

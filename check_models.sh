@@ -62,6 +62,22 @@ echo ""
 echo "── LoRA ─────────────────────────────────────────────────────────"
 check "SmoothMix Animation LoRA" "$MODELS/loras/wan_smoothmix/*.safetensors"
 check_optional "AniEffect LoRA" "$MODELS/loras/wan_anieffect/*.safetensors"
+# 영상 워크플로우 originals 가 참조하는 옵션 LoRA — 없어도 빈 슬롯이라 동작은 함.
+check_optional "Wan2.1 lightx2v cfg/step distill (rank64)" \
+    "$MODELS/loras/wan_smoothmix/Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
+check_optional "Wan2.2 HIGH lightx2v MoE distill (rank64)" \
+    "$MODELS/loras/wan_smoothmix/Wan_2_2_I2V_A14B_HIGH_lightx2v_MoE_distill_lora_rank_64_bf_16.safetensors"
+check_optional "lightx2v I2V 14B 480p distill (rank128)" \
+    "$MODELS/loras/wan_smoothmix/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
+check_optional "smoothMixWan 22-14B I2V high"             "$MODELS/loras/wan_smoothmix/smoothMixWan2214BI2V_i2vHigh.safetensors"
+check_optional "smoothMixWan 22 I2V/T2V high"             "$MODELS/loras/wan_smoothmix/smoothMixWan22I2VT2V_i2vHigh.safetensors"
+# 디테일러 LoRA (옵션) — 사용자가 LoraPicker 에서 선택해야 활성화.
+check_optional "Detailer · add-detail-xl"                "$MODELS/loras/detailer/add-detail-xl.safetensors"
+check_optional "Detailer · AddMicroDetails Illustrious"  "$MODELS/loras/detailer/AddMicroDetails_Illustrious_v5.safetensors"
+check_optional "Detailer · AddMicroDetails NoobAI"       "$MODELS/loras/detailer/AddMicroDetails_NoobAI_v4.safetensors"
+check_optional "Detailer · cfg_scale_boost"              "$MODELS/loras/detailer/cfg_scale_boost.safetensors"
+check_optional "Detailer · XDetail_heavy"                "$MODELS/loras/detailer/XDetail_heavy.safetensors"
+check_optional "Detailer · XDetail_light"                "$MODELS/loras/detailer/XDetail_light.safetensors"
 
 echo ""
 echo "── TTS (수동 다운로드 필요 — gated / 특수) ─────────────────────"

@@ -1,8 +1,10 @@
+import asyncio
 import json
 import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -196,10 +198,14 @@ def _parse_loras(raw: str | None) -> list[dict]:
         return []
 
 
-@router.post("/{scene_id}/regenerate/voice", response_model=SceneRead)
-async def regenerate_voice(
-    project_id: str, scene_id: str, session: Session = Depends(get_session)
-):
+def _build_voice_workflow_for_scene(
+    project_id: str, scene_id: str, session: Session
+) -> tuple[Scene, dict]:
+    """Build the voice generation workflow for a scene without running it.
+
+    Shared by the plain POST endpoint and the SSE streaming variant so that
+    both keep identical validation/dispatch semantics.
+    """
     s = _get_scene(project_id, scene_id, session)
     if not s.dialogue:
         raise HTTPException(400, "대사가 비어 있습니다.")
@@ -213,7 +219,16 @@ async def regenerate_voice(
         tts_engine=s.tts_engine.value,
         voice_design_text=character.voice_design if character else None,
         output_prefix=f"projects/{project_id}/scenes/{scene_id}/voice",
+        voice_params=_parse_json(s.voice_params) or None,
     )
+    return s, wf
+
+
+@router.post("/{scene_id}/regenerate/voice", response_model=SceneRead)
+async def regenerate_voice(
+    project_id: str, scene_id: str, session: Session = Depends(get_session)
+):
+    s, wf = _build_voice_workflow_for_scene(project_id, scene_id, session)
     out = await comfy.run_workflow(wf, kind="audio")
     staged = _stage_into_input(out, f"scene_voice_{scene_id}")
 
@@ -225,18 +240,21 @@ async def regenerate_voice(
     return s
 
 
-@router.post("/{scene_id}/regenerate/image", response_model=SceneRead)
-async def regenerate_image(
-    project_id: str, scene_id: str, session: Session = Depends(get_session)
-):
+def _build_image_workflow_for_scene(
+    project_id: str, scene_id: str, session: Session
+) -> tuple[Scene, dict | None, str]:
+    """Resolve the scene image regen plan.
+
+    Returns ``(scene, workflow_dict_or_None, mode)`` where ``mode`` is one of:
+      - ``"previous_frame"`` — caller should call ``_stage_previous_last_frame``
+        directly (no ComfyUI run).
+      - ``"comfy"`` — caller should ``run_workflow(workflow_dict)``.
+    Raises ``HTTPException`` for validation failures so both the POST and SSE
+    streaming endpoints return the same 4xx codes.
+    """
     s = _get_scene(project_id, scene_id, session)
     if (s.frame_source_mode or "new_scene") == "previous_last_frame":
-        s.image_path = _stage_previous_last_frame(s, session)
-        s.clip_stale = True
-        session.add(s)
-        session.commit()
-        session.refresh(s)
-        return s
+        return s, None, "previous_frame"
 
     chars = _scene_characters(s, session)
     image_params = _parse_json(s.image_params)
@@ -277,15 +295,154 @@ async def regenerate_image(
         negative_prompt=negative_prompt,
         output_prefix=f"projects/{project_id}/scenes/{scene_id}/image",
     )
-    out = await comfy.run_workflow(wf, kind="image")
-    staged = _stage_into_input(out, f"scene_image_{scene_id}")
+    return s, wf, "comfy"
 
-    s.image_path = staged
+
+@router.post("/{scene_id}/regenerate/image", response_model=SceneRead)
+async def regenerate_image(
+    project_id: str, scene_id: str, session: Session = Depends(get_session)
+):
+    s, wf, mode = _build_image_workflow_for_scene(project_id, scene_id, session)
+    if mode == "previous_frame":
+        s.image_path = _stage_previous_last_frame(s, session)
+    else:
+        out = await comfy.run_workflow(wf, kind="image")
+        s.image_path = _stage_into_input(out, f"scene_image_{scene_id}")
     s.clip_stale = True
     session.add(s)
     session.commit()
     session.refresh(s)
     return s
+
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _stream_workflow_run(
+    *,
+    wf: dict,
+    kind: str,
+    queue: "asyncio.Queue[str | None]",
+    loop: asyncio.AbstractEventLoop,
+) -> Path:
+    """Run a workflow while teeing every ComfyUI websocket event to ``queue`` as SSE.
+
+    Forwards ``queued / executing / progress / executed / preview_image / freed``
+    events. ``preview_image`` carries an inline base64 thumbnail of the
+    in-flight latent (ComfyUI must be launched with ``--preview-method auto``).
+    The frontend can drop them straight into an ``<img>`` `src` for live preview.
+    """
+    async def on_event(event: dict) -> None:
+        # Hand off to the queue from whatever task this fires on.
+        loop.call_soon_threadsafe(queue.put_nowait, _sse(event))
+
+    return await comfy.run_workflow(wf, kind=kind, on_event=on_event)
+
+
+@router.post("/{scene_id}/regenerate/image/stream")
+async def regenerate_image_stream(
+    project_id: str, scene_id: str, session: Session = Depends(get_session)
+):
+    """SSE-streamed scene image regen.
+
+    Event timeline:
+      data: {"type":"queued",...}            ← prompt accepted by ComfyUI
+      data: {"type":"executing","node":...}  ← per-node start
+      data: {"type":"progress","progress_pct":N,"node":...}  ← sampler step
+      data: {"type":"preview_image","data_url":"data:image/jpeg;base64,..."}  ← latent thumb
+      data: {"type":"executed","node":...}   ← node finished
+      data: {"type":"output_ready","path":"..."}  ← full file written
+      data: {"type":"freed",...}             ← VRAM released
+      data: {"type":"complete","scene":{...}}
+      data: {"type":"error","message":"..."}
+    """
+    s, wf, mode = _build_image_workflow_for_scene(project_id, scene_id, session)
+
+    async def stream():
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        loop = asyncio.get_event_loop()
+
+        async def worker():
+            try:
+                if mode == "previous_frame":
+                    await queue.put(_sse({"type": "status", "message": "이전 씬 라스트프레임 추출"}))
+                    s.image_path = _stage_previous_last_frame(s, session)
+                else:
+                    out = await _stream_workflow_run(
+                        wf=wf, kind="image", queue=queue, loop=loop
+                    )
+                    s.image_path = _stage_into_input(out, f"scene_image_{scene_id}")
+                s.clip_stale = True
+                session.add(s)
+                session.commit()
+                session.refresh(s)
+                await queue.put(_sse({
+                    "type": "complete",
+                    "scene": SceneRead.model_validate(s, from_attributes=True).model_dump(),
+                }))
+            except Exception as exc:
+                await queue.put(_sse({"type": "error", "message": str(exc)}))
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.post("/{scene_id}/regenerate/voice/stream")
+async def regenerate_voice_stream(
+    project_id: str, scene_id: str, session: Session = Depends(get_session)
+):
+    """SSE-streamed scene voice regen. Same event shape as image stream
+    minus ``preview_image`` (Qwen3 TTS doesn't emit latent previews)."""
+    s, wf = _build_voice_workflow_for_scene(project_id, scene_id, session)
+
+    async def stream():
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        loop = asyncio.get_event_loop()
+
+        async def worker():
+            try:
+                out = await _stream_workflow_run(
+                    wf=wf, kind="audio", queue=queue, loop=loop
+                )
+                s.voice_path = _stage_into_input(out, f"scene_voice_{scene_id}")
+                s.clip_stale = True
+                session.add(s)
+                session.commit()
+                session.refresh(s)
+                await queue.put(_sse({
+                    "type": "complete",
+                    "scene": SceneRead.model_validate(s, from_attributes=True).model_dump(),
+                }))
+            except Exception as exc:
+                await queue.put(_sse({"type": "error", "message": str(exc)}))
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @router.post("/{scene_id}/image/upload", response_model=SceneRead)

@@ -23,6 +23,7 @@ nohup python ComfyUI/main.py --port 8188 \
     --normalvram --cache-none --disable-smart-memory \
     --disable-pinned-memory \
     --reserve-vram 0.5 \
+    --preview-method auto \
     > logs/comfyui.log 2>&1 &
 echo "  PID=$!  로그: logs/comfyui.log"
 

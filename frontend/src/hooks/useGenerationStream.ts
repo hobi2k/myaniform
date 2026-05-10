@@ -9,13 +9,42 @@ export type StreamStage =
   | "complete"
   | "error";
 
+/**
+ * Union type for all SSE events emitted by myaniform's streaming endpoints.
+ *
+ * Two families share this hook:
+ *   1. "status-shaped" events from `render_edit/stream` — high-level stage
+ *      messages with `stage`, `message`, `progress_pct`.
+ *   2. ComfyUI passthrough events from `regenerate/image/stream` and
+ *      `regenerate/voice/stream` — per-node `queued/executing/progress/
+ *      executed/preview_image/freed/output_ready` events forwarded straight
+ *      from the ComfyUI websocket.
+ *
+ * Both end with `complete` (with arbitrary payload field) or `error`.
+ */
 export interface StreamEvent<T> {
-  type: "status" | "complete" | "error";
+  type:
+    | "status"
+    | "complete"
+    | "error"
+    | "queued"
+    | "executing"
+    | "progress"
+    | "executed"
+    | "preview_image"
+    | "freed"
+    | "output_ready";
   stage?: StreamStage;
   message?: string;
   progress_pct?: number;
+  value?: number;
+  max?: number;
   node?: string;
   prompt_id?: string;
+  data_url?: string;
+  mime?: string;
+  size?: number;
+  path?: string;
   /** Backend-specific payload key for the completed entity (e.g. "character" or "scene"). */
   [k: string]: unknown;
   payload?: T;
@@ -31,6 +60,9 @@ export interface StreamState {
   logs: string[];
   error: string | null;
   running: boolean;
+  /** Latest base64 data URL from a ComfyUI `preview_image` (latent thumbnail).
+   *  null until the first preview frame; cleared on reset/complete. */
+  previewDataUrl: string | null;
 }
 
 export const IDLE_STREAM: StreamState = {
@@ -43,6 +75,7 @@ export const IDLE_STREAM: StreamState = {
   logs: [],
   error: null,
   running: false,
+  previewDataUrl: null,
 };
 
 export interface RunStreamOpts<T> {
@@ -90,6 +123,7 @@ export function useGenerationStream<T = unknown>() {
         logs: [`[${new Date().toLocaleTimeString()}] ${label} 시작`],
         error: null,
         running: true,
+        previewDataUrl: null,
       });
 
       try {
@@ -128,6 +162,39 @@ export function useGenerationStream<T = unknown>() {
                 running: (ev.stage ?? prev.stage) !== "complete",
               }));
               if (ev.message && shouldLogStatus(ev)) appendLog(ev.message);
+            } else if (ev.type === "queued") {
+              // ComfyUI passthrough: prompt accepted into the queue.
+              setTask((prev) => ({ ...prev, stage: "queued", message: "ComfyUI 큐 진입" }));
+              appendLog("ComfyUI 큐 진입");
+            } else if (ev.type === "executing") {
+              setTask((prev) => ({
+                ...prev,
+                stage: "running",
+                node: ev.node ?? prev.node,
+                message: ev.node ? `노드 ${ev.node} 실행 중` : prev.message,
+              }));
+            } else if (ev.type === "progress") {
+              // Per-sampler-step progress (0..100). Multiple nodes (sampler →
+              // face detailer → hand detailer) each cycle through 0→100, so
+              // we don't try to reconcile into a single global percentage —
+              // we just expose the current step %.
+              setTask((prev) => ({
+                ...prev,
+                stage: "running",
+                node: ev.node ?? prev.node,
+                progressPct: ev.progress_pct ?? prev.progressPct,
+              }));
+            } else if (ev.type === "preview_image" && ev.data_url) {
+              // Latent thumbnail — overwrite so UI shows the freshest one.
+              setTask((prev) => ({ ...prev, previewDataUrl: ev.data_url ?? null }));
+            } else if (ev.type === "executed") {
+              // Per-node completion (no extra UI state beyond a log line).
+              if (ev.node) appendLog(`노드 ${ev.node} 완료`);
+            } else if (ev.type === "output_ready") {
+              setTask((prev) => ({ ...prev, stage: "saving", message: "결과 파일 저장 중", progressPct: 95 }));
+              appendLog("산출물 파일 준비 완료");
+            } else if (ev.type === "freed") {
+              // VRAM freed — informational log only.
             } else if (ev.type === "complete") {
               const entity = (ev as Record<string, unknown>)[payloadField] as T | undefined;
               setTask((prev) => ({
@@ -136,6 +203,9 @@ export function useGenerationStream<T = unknown>() {
                 message: `${label} 완료`,
                 progressPct: 100,
                 running: false,
+                // Keep the last preview thumbnail visible after complete so
+                // the UI doesn't flash empty between SSE end and asset
+                // version bump that swaps to the real file.
               }));
               appendLog(`${label} 완료`);
               if (entity && onComplete) onComplete(entity);

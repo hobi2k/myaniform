@@ -423,6 +423,24 @@ function Download-Civitai {
     Civitai-Download "2695694" "$MODELS\loras\wan_smoothmix" "SmoothMix_illustrious.safetensors"
 
     Write-Host ""
+    Write-Host "--- Wan Video 가속/품질 LoRA (lightx2v + smoothmix Wan) ---"
+    # workflows/originals 의 동영상 워크플로우 참조 — 옵션이지만 영상 품질에 직결.
+    Hf-Download "Kijai/WanVideo_comfy" `
+        "Wan21_I2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors" `
+        "$MODELS\loras\wan_smoothmix"
+    Hf-Download "Kijai/WanVideo_comfy" `
+        "Wan_2_2_I2V_A14B_HIGH_lightx2v_MoE_distill_lora_rank_64_bf_16.safetensors" `
+        "$MODELS\loras\wan_smoothmix"
+    Hf-Download "Kijai/WanVideo_comfy" `
+        "lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" `
+        "$MODELS\loras\wan_smoothmix"
+    $SM_WAN = "D:\Stable Diffusion\StabilityMatrix-win-x64\Data\Packages\ComfyUI\models\loras\wan_smoothmix"
+    ExternalOrCivitai-Download "$SM_WAN\smoothMixWan2214BI2V_i2vHigh.safetensors" `
+        "" "$MODELS\loras\wan_smoothmix" "smoothMixWan2214BI2V_i2vHigh.safetensors"
+    ExternalOrCivitai-Download "$SM_WAN\smoothMixWan22I2VT2V_i2vHigh.safetensors" `
+        "" "$MODELS\loras\wan_smoothmix" "smoothMixWan22I2VT2V_i2vHigh.safetensors"
+
+    Write-Host ""
     Write-Host "--- Detailer / Quality LoRA (외부 우선, Civitai fallback) ---"
     $SM_DET = "D:\Stable Diffusion\StabilityMatrix-win-x64\Data\Packages\ComfyUI\models\loras\detailer"
     $DET_DIR = "$MODELS\loras\detailer"

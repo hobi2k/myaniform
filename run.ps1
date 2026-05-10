@@ -41,7 +41,8 @@ $comfyArgs = @(
     "--normalvram",
     "--cache-none",
     "--disable-smart-memory",
-    "--reserve-vram", "0.5"
+    "--reserve-vram", "0.5",
+    "--preview-method", "auto"
 )
 $comfyProc = Start-Process -FilePath "python" `
     -ArgumentList $comfyArgs `

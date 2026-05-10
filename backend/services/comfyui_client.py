@@ -1,7 +1,9 @@
 """ComfyUI API 클라이언트 (비동기)."""
 
+import base64
 import inspect
 import json
+import struct
 import uuid
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -78,6 +80,38 @@ async def ensure_nodes_available(required: list[str], *, context: str) -> None:
         )
 
 
+def _decode_preview_frame(raw: bytes) -> dict[str, Any] | None:
+    """Decode ComfyUI's binary preview websocket frame.
+
+    Frame layout (big-endian):
+        uint32 event_type    # 1 = preview image
+        uint32 image_format  # 1 = jpeg, 2 = png
+        bytes  image_data    # raw encoded image bytes
+
+    The preview is emitted by ComfyUI when launched with
+    ``--preview-method auto`` (or latent2rgb / taesd) — it samples the
+    in-flight latent every step and ships a small thumbnail. We forward it
+    as a base64 data URL so the frontend can render it without any extra
+    fetch, and we keep the prompt_id passthrough nullable since these
+    frames don't carry one.
+    """
+    if len(raw) < 8:
+        return None
+    event_type, image_format = struct.unpack(">II", raw[:8])
+    if event_type != 1:
+        return None
+    payload = raw[8:]
+    if not payload:
+        return None
+    mime = "image/jpeg" if image_format == 1 else "image/png"
+    return {
+        "type": "preview_image",
+        "mime": mime,
+        "data_url": f"data:{mime};base64,{base64.b64encode(payload).decode('ascii')}",
+        "size": len(payload),
+    }
+
+
 async def wait_for_output(
     prompt_id: str,
     client_id: str,
@@ -88,6 +122,16 @@ async def wait_for_output(
     uri = f"{COMFYUI_WS}/ws?clientId={client_id}"
     async with websockets.connect(uri) as ws:
         async for raw in ws:
+            # Binary frames carry intermediate latent previews (`b_preview`).
+            # ComfyUI does not include a prompt_id in these — they belong to
+            # the most-recently-executing prompt for this client, so as long
+            # as we connect with the same client_id we can attribute them.
+            if isinstance(raw, (bytes, bytearray)):
+                preview = _decode_preview_frame(bytes(raw))
+                if preview is not None:
+                    preview["prompt_id"] = prompt_id
+                    await _emit(on_event, preview)
+                continue
             msg = json.loads(raw)
             msg_type = msg.get("type")
             data = msg.get("data", {})

@@ -13,13 +13,16 @@ import type {
   SceneType,
   VideoParams,
 } from "../../types";
+import { useGenerationStream } from "../../hooks/useGenerationStream";
 import { DiffusionModelPicker } from "../model/ModelPickers";
 import ImageParamsEditor from "../shared/ImageParamsEditor";
 import LoraPicker from "../shared/LoraPicker";
+import SceneVoiceParamsEditor from "../shared/SceneVoiceParamsEditor";
 import StepCard, { type StepState } from "../shared/StepCard";
 import VideoParamsEditor from "../shared/VideoParamsEditor";
 import Button from "../ui/Button";
 import CharacterMultiPicker from "./CharacterMultiPicker";
+import type { VoiceParams } from "../../types";
 
 const SCENE_TYPE_LABEL: Record<SceneType, string> = {
   lipsync: "💬 립싱크 (S2V)",
@@ -63,6 +66,7 @@ export default function SceneInspector({
     frame_source_mode: scene.frame_source_mode ?? "new_scene",
     video_params: scene.video_params ?? "",
     tts_engine: scene.tts_engine,
+    voice_params: scene.voice_params ?? "",
     diffusion_model: scene.diffusion_model ?? "",
     loras_json: scene.loras_json ?? "",
   }));
@@ -87,6 +91,7 @@ export default function SceneInspector({
       frame_source_mode: scene.frame_source_mode ?? "new_scene",
       video_params: scene.video_params ?? "",
       tts_engine: scene.tts_engine,
+      voice_params: scene.voice_params ?? "",
       diffusion_model: scene.diffusion_model ?? "",
       loras_json: scene.loras_json ?? "",
     });
@@ -111,20 +116,63 @@ export default function SceneInspector({
     return thunk();
   };
 
-  const regenVoice = useMutation({
-    mutationFn: () => persistThenRun(() => api.scenes.regenerateVoice(projectId, scene.id)),
-    onSuccess: (s) => {
-      onUpdated(s);
-      qc.invalidateQueries({ queryKey: ["scenes", projectId] });
+  // Streaming regen — uses /regenerate/{kind}/stream which forwards ComfyUI
+  // progress events (queued/executing/progress/preview_image/freed/complete).
+  // ``preview_image`` events surface the in-flight latent thumbnail, giving
+  // a live "you're getting THIS" preview during sampling instead of just a
+  // spinner.
+  const imageStream = useGenerationStream<Scene>();
+  const voiceStream = useGenerationStream<Scene>();
+
+  const regenImage = {
+    isPending: imageStream.task.running,
+    isError: imageStream.task.stage === "error",
+    error: imageStream.task.error ? new Error(imageStream.task.error) : null,
+    mutate: () => {
+      void (async () => {
+        // Persist the draft first so the backend run picks up the latest UI
+        // state (matches the old `persistThenRun` semantics).
+        await api.scenes.update(projectId, scene.id, sceneDraft())
+          .then(onUpdated)
+          .catch(() => undefined);
+        imageStream.reset();
+        imageStream.run({
+          kind: "image",
+          label: "씬 장면샷 재생성",
+          url: `/api/projects/${projectId}/scenes/${scene.id}/regenerate/image/stream`,
+          payloadField: "scene",
+          onComplete: (updated) => {
+            onUpdated(updated as Scene);
+            qc.invalidateQueries({ queryKey: ["scenes", projectId] });
+          },
+        });
+      })();
     },
-  });
-  const regenImage = useMutation({
-    mutationFn: () => persistThenRun(() => api.scenes.regenerateImage(projectId, scene.id)),
-    onSuccess: (s) => {
-      onUpdated(s);
-      qc.invalidateQueries({ queryKey: ["scenes", projectId] });
+  };
+
+  const regenVoice = {
+    isPending: voiceStream.task.running,
+    isError: voiceStream.task.stage === "error",
+    error: voiceStream.task.error ? new Error(voiceStream.task.error) : null,
+    mutate: () => {
+      void (async () => {
+        await api.scenes.update(projectId, scene.id, sceneDraft())
+          .then(onUpdated)
+          .catch(() => undefined);
+        voiceStream.reset();
+        voiceStream.run({
+          kind: "voice",
+          label: "씬 음성 재생성",
+          url: `/api/projects/${projectId}/scenes/${scene.id}/regenerate/voice/stream`,
+          payloadField: "scene",
+          onComplete: (updated) => {
+            onUpdated(updated as Scene);
+            qc.invalidateQueries({ queryKey: ["scenes", projectId] });
+          },
+        });
+      })();
     },
-  });
+  };
   const regenVideo = useMutation({
     mutationFn: () => persistThenRun(() => api.scenes.regenerateVideo(projectId, scene.id)),
     onSuccess: (s) => {
@@ -303,25 +351,8 @@ export default function SceneInspector({
           </Button>
         }
       >
+        <StreamProgressStrip task={voiceStream.task} />
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[11px] text-gray-400 mb-1 block">TTS 엔진</label>
-              <select
-                className="input-base w-full"
-                value={form.tts_engine ?? "qwen3"}
-                onChange={(e) => set("tts_engine", e.target.value as "qwen3" | "s2pro")}
-              >
-                <option value="qwen3">QWEN3 TTS</option>
-                <option value="s2pro">Fish S2 Pro</option>
-              </select>
-            </div>
-            <div className="text-[11px] text-gray-500 flex items-end pb-2">
-              {scene.type === "lipsync"
-                ? "S2V로 입/시선/머리/손/호흡까지 음성에 맞춤"
-                : "비-S2V는 voiceover로 MMAudio와 믹스"}
-            </div>
-          </div>
           <div>
             <label className="text-[11px] text-gray-400 mb-1 block">대사</label>
             <textarea
@@ -330,7 +361,33 @@ export default function SceneInspector({
               value={form.dialogue ?? ""}
               onChange={(e) => set("dialogue", e.target.value)}
             />
+            <p className="mt-1 text-[10px] text-gray-500">
+              {scene.type === "lipsync"
+                ? "S2V로 입/시선/머리/손/호흡까지 음성에 맞춤"
+                : "비-S2V는 voiceover로 MMAudio와 믹스"}
+            </p>
           </div>
+          {(() => {
+            const voiceParams = parseJson<VoiceParams>(form.voice_params ?? "", {});
+            const firstChar = characters.find((c) => charIds.includes(c.id));
+            const hasRefAudio = !!firstChar?.voice_sample_path;
+            return (
+              <SceneVoiceParamsEditor
+                value={voiceParams}
+                onChange={(p) => {
+                  // Mirror the new mode's engine family back into tts_engine
+                  // so legacy code paths (and the response_model) stay coherent.
+                  const inferred: "qwen3" | "s2pro" = (p.mode ?? "").startsWith("s2pro") ? "s2pro" : "qwen3";
+                  setForm((f) => ({
+                    ...f,
+                    voice_params: JSON.stringify(p),
+                    tts_engine: inferred,
+                  }));
+                }}
+                hasReferenceAudio={hasRefAudio}
+              />
+            );
+          })()}
           {regenVoice.isError && (
             <p className="text-[11px] text-red-300">{(regenVoice.error as Error).message}</p>
           )}
@@ -389,6 +446,7 @@ export default function SceneInspector({
             e.target.value = "";
           }}
         />
+        <StreamProgressStrip task={imageStream.task} />
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -537,6 +595,64 @@ export default function SceneInspector({
           )}
         </div>
       </StepCard>
+    </div>
+  );
+}
+
+/**
+ * Inline strip rendered above each StepCard's body when its corresponding
+ * regen stream is active. Shows:
+ *   - Stage label + per-step progress %  (from ComfyUI `progress` events)
+ *   - Active node name                    (from `executing` events)
+ *   - Latest latent thumbnail              (from `preview_image` binary frames)
+ *
+ * Hidden on idle/complete so it doesn't take vertical space.
+ */
+function StreamProgressStrip({
+  task,
+}: {
+  task: ReturnType<typeof useGenerationStream>["task"];
+}) {
+  if (task.stage === "idle") return null;
+  if (task.stage === "complete" && !task.previewDataUrl) return null;
+  const pct = Math.max(0, Math.min(100, task.progressPct || 0));
+  const stageLabel: Record<string, string> = {
+    preparing: "준비",
+    queued: "큐 대기",
+    running: "생성 중",
+    saving: "저장 중",
+    complete: "완료",
+    error: "오류",
+  };
+  const label = stageLabel[task.stage] ?? task.stage;
+  const errored = task.stage === "error";
+  return (
+    <div
+      className={`mb-3 rounded-lg border ${errored ? "border-red-500/30 bg-red-500/5" : "border-white/10 bg-black/20"} p-2 flex gap-3 items-stretch`}
+    >
+      {task.previewDataUrl && (
+        <img
+          src={task.previewDataUrl}
+          alt="latent preview"
+          className="w-16 h-16 object-cover rounded-md ring-1 ring-white/10 flex-shrink-0"
+        />
+      )}
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5">
+        <div className="flex items-center gap-2 text-[11px] text-gray-300">
+          <span className={`font-semibold ${errored ? "text-red-300" : "text-accent"}`}>{label}</span>
+          {task.node && <span className="text-gray-500 truncate">노드 {task.node}</span>}
+          <span className="ml-auto tabular-nums text-gray-400">{pct}%</span>
+        </div>
+        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all duration-150 ${errored ? "bg-red-500" : "bg-accent"}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {task.message && (
+          <div className="text-[10px] text-gray-500 truncate">{task.message}</div>
+        )}
+      </div>
     </div>
   );
 }

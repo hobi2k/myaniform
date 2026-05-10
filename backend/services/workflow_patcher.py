@@ -242,10 +242,48 @@ def patch_voice(
     tts_engine: str,
     voice_design_text: Optional[str] = None,
     output_prefix: Optional[str] = None,
+    voice_params: Optional[dict] = None,
 ) -> dict:
-    staged_voice = _stage_ref(voice_sample, "voicesample") if voice_sample else None
+    """Build the TTS workflow for a scene's dialogue.
 
-    if tts_engine == "s2pro" and staged_voice:
+    Dispatch precedence:
+      1. ``voice_params["mode"]`` if set — full new-mode catalog
+         (``backend.services.voice_modes.VOICE_MODE_BUILDERS``).
+      2. Otherwise infer a sensible default from ``tts_engine`` + presence of
+         ``voice_sample`` (legacy rows that pre-date the mode field).
+
+    Modes whose builder returns ``None`` (currently the S2 Pro family) fall
+    back to the original ``ws_tts_*.json`` templates so we don't have to
+    rewrite the Fish S2 wiring inline.
+    """
+    from .voice_modes import VOICE_MODE_BUILDERS, infer_default_mode
+
+    staged_voice = _stage_ref(voice_sample, "voicesample") if voice_sample else None
+    params = dict(voice_params or {})
+
+    # Surface the legacy free-form `voice_design_text` as `instruct` for any
+    # mode that uses an instruct field — keeps existing character settings
+    # working without UI churn.
+    if voice_design_text and not params.get("instruct"):
+        params.setdefault("voice_design_text", voice_design_text)
+        params.setdefault("instruct", voice_design_text)
+
+    mode = (params.get("mode") or "").strip().lower()
+    if not mode:
+        mode = infer_default_mode(tts_engine, has_ref_audio=bool(staged_voice))
+
+    builder = VOICE_MODE_BUILDERS.get(mode)
+    prefix = output_prefix or "scene_voice"
+
+    if builder is not None:
+        built = builder(dialogue, staged_voice, params, prefix)
+        if built is not None:
+            wf = built
+            _apply_filename_prefixes(wf, default_prefix=output_prefix)
+            return wf
+
+    # ── Legacy / fallback paths (S2 Pro family + safety net) ──
+    if mode.startswith("s2pro") and staged_voice:
         wf = load_workflow("ws_tts_s2pro.json")
         for node in _iter_nodes(wf):
             cls = node.get("class_type", "")
@@ -257,18 +295,7 @@ def patch_voice(
         _apply_filename_prefixes(wf, default_prefix=output_prefix)
         return wf
 
-    if staged_voice and tts_engine == "qwen3":
-        wf = load_workflow("ws_tts_clone.json")
-        for node in _iter_nodes(wf):
-            cls = node.get("class_type", "")
-            inp = node.setdefault("inputs", {})
-            if cls == "LoadAudio":
-                inp["audio"] = staged_voice
-            elif cls == "Qwen3CustomVoiceFromPrompt":
-                inp["text"] = dialogue
-        _apply_filename_prefixes(wf, default_prefix=output_prefix)
-        return wf
-
+    # Last resort: legacy voice-design template (3-model directed clone).
     wf = load_workflow("ws_voice_design.json")
     for node in _iter_nodes(wf):
         cls = node.get("class_type", "")
@@ -276,8 +303,8 @@ def patch_voice(
         if cls == "Qwen3DirectedCloneFromVoiceDesign":
             inp["design_text"] = dialogue
             inp["target_text"] = dialogue
-            if voice_design_text:
-                inp["design_instruct"] = voice_design_text
+            if voice_design_text or params.get("instruct"):
+                inp["design_instruct"] = params.get("instruct") or voice_design_text or ""
     _apply_filename_prefixes(wf, default_prefix=output_prefix)
     return wf
 
