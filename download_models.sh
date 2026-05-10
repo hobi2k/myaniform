@@ -15,15 +15,41 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODELS="$ROOT/ComfyUI/models"
 FAILED_DOWNLOADS=()
 
-# Civitai 토큰 로드
+# .env 로드 (단일 source). 셸에 이미 export 된 값은 덮어쓰지 않음.
+if [ -f "$ROOT/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$ROOT/.env"
+    set +a
+fi
+
+# OS 감지 — external_or_civitai_dl 의 fallback 경로 표시용 (기능 분기는 안 함).
+case "$(uname -s)" in
+    Darwin) PLATFORM=mac ;;
+    Linux)
+        if grep -qi microsoft /proc/version 2>/dev/null; then PLATFORM=wsl
+        else PLATFORM=linux
+        fi
+        ;;
+    *) PLATFORM=other ;;
+esac
+
+# 외장 LoRA fallback (고급 옵션 — 미설정이 기본).
+# 다른 ComfyUI 설치본에 이미 받아둔 LoRA 디렉토리를 재사용하고 싶을 때만 사용.
+# `MYANIFORM_LORA_FALLBACK` 으로 가리키면 동일 파일명을 심볼릭링크로 가져옴.
+# 미설정 (기본): 모든 LoRA 를 HF/Civitai 에서 새로 다운로드.
+# 자세한 사용법은 docs/install.md "고급 — 기존 LoRA 재사용" 절 참고.
+LORA_FALLBACK_ROOT="${MYANIFORM_LORA_FALLBACK:-}"
+
+# Backwards-compat: 기존 단일토큰 파일도 인식 (.env 가 토큰을 안 가지고 있을 때만).
+# 신규 사용자는 .env 의 HF_TOKEN / CIVITAI_TOKEN 만 채우면 됨.
 if [ -z "$CIVITAI_TOKEN" ] && [ -f "$ROOT/.civitai_token" ]; then
     CIVITAI_TOKEN="$(tr -d '[:space:]' < "$ROOT/.civitai_token")"
 fi
-
-# HuggingFace 토큰 로드 (gated repo용)
 if [ -z "$HF_TOKEN" ] && [ -f "$ROOT/.hf_token" ]; then
     HF_TOKEN="$(tr -d '[:space:]' < "$ROOT/.hf_token")"
 fi
+export CIVITAI_TOKEN HF_TOKEN
 
 MODE="${1:-all}"  # all | --hf-only | --civitai | --list
 
@@ -465,8 +491,10 @@ download_civitai() {
           "lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" \
           "$MODELS/loras/wan_smoothmix"
     # smoothMix Wan 변형 — Civitai 에서 model id 확인되면 받음. 둘 다 model 페이지
-    # 비공개일 수 있으므로 외부 우선 fallback (StabilityMatrix 의 기존 받은 파일).
-    local SM_WAN="/mnt/d/Stable Diffusion/StabilityMatrix-win-x64/Data/Packages/ComfyUI/models/loras/wan_smoothmix"
+    # 비공개일 수 있으므로 외부 우선 fallback. MYANIFORM_LORA_FALLBACK/wan_smoothmix
+    # 가 있으면 거기서 심링크, 없으면 Civitai 시도.
+    local SM_WAN="${LORA_FALLBACK_ROOT:+$LORA_FALLBACK_ROOT/wan_smoothmix}"
+    SM_WAN="${SM_WAN:-/__no_fallback__}"
     external_or_civitai_dl "$SM_WAN/smoothMixWan2214BI2V_i2vHigh.safetensors" \
         "" "$MODELS/loras/wan_smoothmix" "smoothMixWan2214BI2V_i2vHigh.safetensors"
     external_or_civitai_dl "$SM_WAN/smoothMixWan22I2VT2V_i2vHigh.safetensors" \
@@ -474,10 +502,9 @@ download_civitai() {
 
     echo ""
     echo "━━━ Detailer / Quality LoRA (외부 우선, Civitai fallback) ━━"
-    # 사용자의 StabilityMatrix 폴더에 이미 받아둔 파일이 있으면 거기를 심링크.
-    # 외부에도 없고 vid 도 있으면 Civitai 에서 받아옴. NAI_vpred_fix / sdxl_enhance
-    # 는 model 99619 가 비공개라 vid 미상 — 외부 파일 fallback 만.
-    local SM_DET="/mnt/d/Stable Diffusion/StabilityMatrix-win-x64/Data/Packages/ComfyUI/models/loras/detailer"
+    # 같은 규칙: MYANIFORM_LORA_FALLBACK/detailer 우선, 없으면 Civitai.
+    local SM_DET="${LORA_FALLBACK_ROOT:+$LORA_FALLBACK_ROOT/detailer}"
+    SM_DET="${SM_DET:-/__no_fallback__}"
     local DET_DIR="$MODELS/loras/detailer"
     external_or_civitai_dl "$SM_DET/add-detail-xl.safetensors"                "135867"  "$DET_DIR" "add-detail-xl.safetensors"
     external_or_civitai_dl "$SM_DET/AddMicroDetails_Illustrious_v5.safetensors" "1963644" "$DET_DIR" "AddMicroDetails_Illustrious_v5.safetensors"

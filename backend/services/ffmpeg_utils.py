@@ -675,9 +675,27 @@ def _ass_safe_text(text: str) -> str:
 
 
 def _subtitle_fonts_dir(output: Path) -> Path | None:
-    """Use a tiny fontsdir so libass does not scan the whole Windows Fonts tree."""
+    """Use a tiny fontsdir so libass does not scan the whole system fonts tree.
+
+    Probes platform-specific Korean-capable fonts in priority order:
+      - WSL: Windows 의 맑은고딕 (한글 + 라틴 모두 적절)
+      - macOS: Apple SD Gothic Neo (시스템 기본 한글 폰트). NanumGothic 도 후보.
+      - Linux: NanumGothic → Noto Sans CJK → DejaVu (한글은 □ 처리될 수 있음, 최후수단)
+    """
     candidates = [
+        # WSL — Windows 호스트 폰트
         Path("/mnt/c/Windows/Fonts/malgun.ttf"),
+        Path("/mnt/c/Windows/Fonts/malgunbd.ttf"),
+        # macOS — 시스템 기본 한글 폰트
+        Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
+        Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),
+        Path("/Library/Fonts/AppleGothic.ttf"),
+        Path.home() / "Library" / "Fonts" / "NanumGothic.ttf",
+        # Linux — 일반적인 한글 폰트 (apt install fonts-nanum / fonts-noto-cjk)
+        Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+        # Cross-platform 라틴 fallback (한글은 글리프 부재로 깨짐)
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
     ]
     font = next((path for path in candidates if path.exists()), None)

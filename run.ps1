@@ -10,6 +10,24 @@ $ErrorActionPreference = "Stop"
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ROOT
 
+# .env 로드 — 자식 프로세스 (uvicorn / ComfyUI) 가 env 자동 상속.
+function Import-Dotenv {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith('#')) { return }
+        $eq = $line.IndexOf('=')
+        if ($eq -le 0) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if (-not [Environment]::GetEnvironmentVariable($name)) {
+            Set-Item -Path "Env:$name" -Value $value
+        }
+    }
+}
+Import-Dotenv (Join-Path $ROOT ".env")
+
 if (-not (Test-Path ".venv")) {
     Write-Host "ERR: .venv 없음. 먼저 .\setup.ps1 실행"
     exit 1

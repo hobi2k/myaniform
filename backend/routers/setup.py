@@ -2,6 +2,7 @@
 /api/setup/status — 필수 모델 존재 여부 확인
 프론트엔드 startup 체크에서 호출됨
 """
+import os
 from pathlib import Path
 from fastapi import APIRouter
 import httpx
@@ -34,7 +35,7 @@ router = APIRouter(prefix="/api/setup", tags=["setup"])
 # ComfyUI models 루트 (backend는 myaniform/backend/ 에서 실행)
 _MODELS = Path(__file__).resolve().parents[2] / "ComfyUI" / "models"
 _CUSTOM_NODES = Path(__file__).resolve().parents[2] / "ComfyUI" / "custom_nodes"
-_COMFYUI_URL = "http://127.0.0.1:8188"
+_COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
 
 
 def _any(*patterns: str) -> bool:

@@ -2,6 +2,7 @@
 # myaniform 의존성 설치 스크립트
 # - uv 기반 venv 관리 (pip 직접 호출 금지)
 # - ComfyUI 커스텀 노드와 필수 모델은 새 클론에서도 자동으로 clone/pull/download 함
+# - Linux/WSL/macOS 자동 감지 (mac 에선 sageattention 스킵, brew 의존성 체크)
 # - 실행: bash setup.sh
 #
 # 상세 가이드: docs/install.md
@@ -10,26 +11,73 @@ set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+# ── .env 로드 ─────────────────────────────────────────────────────
+# HF_TOKEN, CIVITAI_TOKEN, COMFYUI_URL, MYANIFORM_* 등 모든 env 변수의 단일 source.
+# 이미 export 된 셸 변수는 .env 가 덮어쓰지 않음 (셸 우선 → CI/원격 셸 친화).
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
+fi
+
+# ── OS 감지 ────────────────────────────────────────────────────────
+# PLATFORM ∈ {mac, linux, wsl}.
+# - mac: CUDA 의존 단계(sageattention) 스킵, brew 체크
+# - wsl/linux: 표준 경로 (CUDA 가 있으면 sageattention 빌드)
+case "$(uname -s)" in
+    Darwin) PLATFORM=mac ;;
+    Linux)
+        if grep -qi microsoft /proc/version 2>/dev/null; then
+            PLATFORM=wsl
+        else
+            PLATFORM=linux
+        fi
+        ;;
+    *) PLATFORM=other ;;
+esac
+
 echo "================================================================="
-echo "  myaniform 의존성 설치"
+echo "  myaniform 의존성 설치  (platform: $PLATFORM)"
 echo "================================================================="
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════
-# PHASE 0: uv 확인
+# PHASE 0: 시스템 도구 확인 (uv, git, mac 면 brew + ffmpeg)
 # ═══════════════════════════════════════════════════════════════════
 if ! command -v uv >/dev/null 2>&1; then
     echo "✗ uv 가 설치되어 있지 않음."
-    echo "  설치: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "  설치 후 'source ~/.bashrc' 또는 새 셸에서 재실행."
+    if [ "$PLATFORM" = "mac" ]; then
+        echo "  설치: brew install uv  (또는 curl -LsSf https://astral.sh/uv/install.sh | sh)"
+    else
+        echo "  설치: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    fi
+    echo "  설치 후 새 셸에서 재실행."
     exit 1
 fi
 if ! command -v git >/dev/null 2>&1; then
     echo "✗ git 이 설치되어 있지 않음."
-    echo "  설치: sudo apt install -y git"
+    if [ "$PLATFORM" = "mac" ]; then
+        echo "  설치: xcode-select --install   (또는 brew install git)"
+    else
+        echo "  설치: sudo apt install -y git"
+    fi
     exit 1
 fi
-echo "=== [0/9] uv: $(uv --version) ==="
+if [ "$PLATFORM" = "mac" ]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        echo "✗ Homebrew 가 없음. https://brew.sh 보고 먼저 설치."
+        exit 1
+    fi
+    # ffmpeg 와 aria2 는 우리 파이프라인 + 모델 다운로더가 필수.
+    for tool in ffmpeg aria2; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "  [brew install] $tool"
+            brew install "$tool"
+        fi
+    done
+fi
+echo "=== [0/9] uv: $(uv --version)  platform=$PLATFORM ==="
 
 # ═══════════════════════════════════════════════════════════════════
 # PHASE 1: 모델 디렉토리 확보
@@ -132,7 +180,18 @@ source .venv/bin/activate
 # ═══════════════════════════════════════════════════════════════════
 echo ""
 echo "=== [4/9] ComfyUI 파이썬 의존성 ==="
-uv pip install --quiet -r ComfyUI/requirements.txt
+if [ "$PLATFORM" = "mac" ]; then
+    # Apple Silicon: PyTorch 안정판은 일부 MPS op 미구현 (e.g. aten::_fft_r2c).
+    # 안정판 먼저 설치 (ComfyUI requirements.txt 가 끌고옴) → 그 위에 nightly 로 덮어
+    # 최신 MPS 커널 확보. CPU fallback (PYTORCH_ENABLE_MPS_FALLBACK=1) 도 run.sh
+    # 에서 켜지므로 미지원 op 있어도 실패 안 함.
+    uv pip install --quiet -r ComfyUI/requirements.txt
+    echo "  PyTorch nightly (MPS) 로 업그레이드"
+    uv pip install --quiet --upgrade --pre torch torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/nightly/cpu
+else
+    uv pip install --quiet -r ComfyUI/requirements.txt
+fi
 echo "  완료"
 
 echo ""
@@ -151,11 +210,15 @@ fi
 echo "  완료"
 
 # ═══════════════════════════════════════════════════════════════════
-# PHASE 5: sageattention (필수 — O(n) attention, OOM 방지)
+# PHASE 5: sageattention (CUDA 전용 — mac 에선 자동 스킵)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
 echo "=== [5/9] sageattention (O(n) attention) ==="
-if python -c "from sageattention import sageattn" 2>/dev/null; then
+if [ "$PLATFORM" = "mac" ]; then
+    # sageattention 은 CUDA kernel 빌드라 Apple Silicon 에선 컴파일 불가.
+    # ComfyUI 가 자동으로 sdpa/eager attention 으로 떨어지므로 동작은 함.
+    echo "  [skip] macOS 는 CUDA 가 없어 SDPA(Metal MPS) 자동 사용"
+elif python -c "from sageattention import sageattn" 2>/dev/null; then
     echo "  [skip] 이미 설치됨"
 else
     uv pip install --quiet sageattention

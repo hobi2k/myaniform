@@ -1,7 +1,7 @@
 # Install — 제로부터 재현 가이드
 
 > 목적: **빈 머신에서 `git clone` 한 번으로 myaniform 을 끝까지 빌드·실행**할 수 있게 한다.
-> 지원 환경: Linux / WSL2 Ubuntu / **네이티브 Windows**.
+> 지원 환경: Linux / WSL2 Ubuntu / **네이티브 Windows** / **macOS (Apple Silicon)**.
 > 검증 환경 (primary): WSL2 Ubuntu 22.04, RTX 5080 16GB, Python 3.11, CUDA 13.0.
 
 모든 단계는 **idempotent** — 중간에 막히면 같은 명령 재실행.
@@ -12,8 +12,11 @@
 |---|---|---|---|
 | **A. Linux / WSL2** | `setup.sh` / `run.sh` / `download_models.sh` / `check_models.sh` | 기본 경로 (주 개발 환경) | ✅ 완주 검증 |
 | **B. 네이티브 Windows** | `setup.ps1` / `run.ps1` / `download_models.ps1` / `check_models.ps1` | WSL2 를 쓸 수 없는 Windows 환경 | ⚠ 기능 동일하지만 CI 미검증 |
+| **C. macOS (Apple Silicon)** | `setup.sh` / `run.sh` / `download_models.sh` (자동 분기) | M-시리즈 + 충분한 unified RAM (64GB+) | ⚠ 분기 추가만, 실행 미검증 |
 
 Windows 유저는 GPU ML 에서 **WSL2 가 표준** 이지만 (PyTorch/ComfyUI 튜토리얼 대부분이 WSL2 기준), WSL2 를 설치할 수 없는 환경 (회사 정책·디스크 제약) 을 위해 네이티브 PowerShell 스크립트도 제공. 양쪽 모두 동일한 `git clone` 리포로부터 동작.
+
+macOS 는 별도 스크립트 없이 같은 `setup.sh` / `run.sh` 가 `uname -s` 로 자동 감지해 분기됨 (sageattention 스킵, ComfyUI CUDA 전용 플래그 제거 등). 자세한 차이는 [§ macOS 가이드](#c-macos-apple-silicon) 참조.
 
 ---
 
@@ -30,9 +33,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/hobi2k/myaniform.git
 cd myaniform
 
-# 3) 토큰 준비
-echo "<HF_TOKEN>"       > .hf_token
-echo "<CIVITAI_TOKEN>"  > .civitai_token
+# 3) 환경 변수 — .env 한 파일에 시크릿 / 옵션 모두 적음
+cp .env.example .env
+$EDITOR .env       # HF_TOKEN, CIVITAI_TOKEN 채우기 (나머지는 옵션)
 
 # 4) 파이썬 venv + 의존성 + custom_nodes + 모델 자동 다운로드/검증
 bash setup.sh
@@ -66,9 +69,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 git clone https://github.com/hobi2k/myaniform.git
 cd myaniform
 
-# 4) 토큰 준비
-'hf_xxx...'   | Set-Content -NoNewline .hf_token
-'xxxxxxxx...' | Set-Content -NoNewline .civitai_token
+# 4) 환경 변수 — .env 한 파일에 시크릿 / 옵션 모두 적음
+Copy-Item .env.example .env
+notepad .env             # HF_TOKEN, CIVITAI_TOKEN 채우기
 
 # 5) venv + 의존성 + custom_nodes + 모델 자동 다운로드/검증
 .\setup.ps1
@@ -87,9 +90,88 @@ cd frontend; npm run dev            # :5173 (별도 PowerShell 창)
 
 접속: http://localhost:5173
 
+### C. macOS (Apple Silicon)
+
+```bash
+# 1) Homebrew + 시스템 툴 (Xcode CLT 가 git/clang 끌고옴)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+xcode-select --install
+brew install git git-lfs ffmpeg aria2 node uv
+
+# 2) 클론 + 환경 변수
+git clone https://github.com/hobi2k/myaniform.git
+cd myaniform
+cp .env.example .env
+$EDITOR .env       # HF_TOKEN, CIVITAI_TOKEN 채우기
+
+# 3) 의존성 + custom_nodes + 모델 자동 다운로드 + 색감 LUT 베이크
+bash setup.sh
+
+# 4) 실행
+bash run.sh                          # ComfyUI(MPS) + FastAPI 백그라운드
+cd frontend && npm run dev           # :5173 (별도 터미널)
+```
+
+접속: http://localhost:5173
+
+설치 후 모델 검증:
+```bash
+bash check_models.sh
+```
+
+#### macOS 자동 처리 항목
+
+`setup.sh` / `run.sh` 가 `uname -s` 로 mac 감지 후:
+
+| 단계 | mac 분기 동작 |
+|---|---|
+| `setup.sh` Phase 0 | brew/uv/git 체크 + 누락 시 안내. **ffmpeg / aria2 자동 `brew install`** |
+| `setup.sh` Phase 4 | `ComfyUI/requirements.txt` 설치 → **PyTorch nightly (MPS) 로 자동 업그레이드** (안정판은 일부 MPS op 미구현) |
+| `setup.sh` Phase 5 | sageattention 스킵 (CUDA 전용). ComfyUI 가 PyTorch SDPA(Metal) 자동 사용 |
+| `setup.sh` Phase 9 | 색감 프리셋 3D LUT 베이크 — 동일 |
+| `run.sh` ComfyUI flags | CUDA 전용 (`--normalvram --disable-pinned-memory --reserve-vram`) 제거. `--use-pytorch-cross-attention` 추가 (Metal 친화). `PYTORCH_ENABLE_MPS_FALLBACK=1`, `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` env 자동 export |
+| `download_models.sh` | 외부 fallback 경로 `$MYANIFORM_LORA_FALLBACK` 사용 (미설정시 비활성). 모든 모델은 HF/Civitai 에서 직접 다운로드 |
+| `ffmpeg_utils.py` | 자막 폰트 후보에 `AppleSDGothicNeo.ttc`, `AppleGothic.ttf`, `~/Library/Fonts/NanumGothic.ttf` 자동 탐색 |
+
+#### macOS 사용 흐름 (입문)
+
+1. **첫 실행 검증** — 가벼운 SDXL 이미지 한 장으로 파이프라인 동작 확인
+   ```bash
+   .venv/bin/python scripts/generate_romance_smoke.py
+   ```
+2. **프로젝트 생성 → 캐릭터 1명 → 보이스 샘플 업로드 (선택)**
+3. **씬 생성 → 장면샷 → 음성 → 영상**
+   - 좌측 라이브러리 → "+ 씬"
+   - 우측 인스펙터에서 합성 모드 / 프롬프트 입력
+   - 각 단계 progress bar + (이미지) 라이브 latent 썸네일
+4. **편집 스튜디오** — `/projects/:id/edit-studio` 에서 컷 정렬 / 트랜지션 / 자막 / BGM
+5. **렌더** — 우측 상단 "최종 편집본 렌더" → ffmpeg 4-step 파이프라인 SSE 진행률
+
+#### macOS 트러블슈팅
+
+| 증상 | 원인 / 해결 |
+|---|---|
+| `ModuleNotFoundError: sageattention` | 무시. `run.sh` 가 mac 에서 자동 SDPA fallback. ComfyUI 콘솔 경고만. |
+| ComfyUI 기동 실패 — `MPS backend out of memory` | `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` 가 `run.sh` 에서 export 됨. 그래도 OOM 이면 워크플로우의 batch_size 1 / resolution 낮춤. |
+| 일부 노드 `aten::xxx not implemented for MPS` | `PYTORCH_ENABLE_MPS_FALLBACK=1` 이 켜져 있으면 자동으로 CPU 로 떨어짐. ComfyUI 콘솔에 한 번 경고 뜨고 계속 진행. |
+| `brew install` 권한 오류 | M-시리즈 brew prefix 가 `/opt/homebrew` 인지 확인. 첫 brew 설치 후 `eval "$(/opt/homebrew/bin/brew shellenv)"` 한 번 실행해서 PATH 등록. |
+| HuggingFace `gated repo` 403 | `.env` 의 `HF_TOKEN=` 채웠는지 확인. 일부 모델 (Qwen3-TTS Base) 는 HF 계정에서 모델 페이지의 access 요청 필요. |
+| 자막에 한글이 □ 로 나옴 | 시스템에 `AppleSDGothicNeo` 가 있는지 확인 (`/System/Library/Fonts/AppleSDGothicNeo.ttc`). 없으면 `brew install --cask font-nanum-gothic` 로 NanumGothic 추가. |
+| `ComfyUI-Crystools` import 실패 (pynvml) | mac 엔 NVIDIA 도구 없음 — graceful 비활성. ComfyUI 자체는 정상 기동. |
+
+#### 권장 하드웨어
+
+- **최소**: M2 Pro 32GB (이미지 + TTS 위주, Wan 영상은 한계)
+- **권장**: M3/M4/M5 Pro·Max 64GB+
+- **풀 파이프라인 (Wan 2.2 14B 영상)**: M3/M4/M5 Max 64GB+ 또는 128GB
+
+128GB unified memory 면 메모리 제약 없이 Wan 2.2 14B fp16 까지 들어감. 속도는 워크플로우/해상도/스텝수에 따라 다르며, 첫 실행은 모델 디스크 → MPS 메모리 로드로 1-2분 추가 소요.
+
 ---
 
 ## 1. 하드웨어·OS 요구사항
+
+### NVIDIA (Linux / WSL2 / Windows)
 
 | 항목 | 최소 | 권장 |
 |---|---|---|
@@ -99,6 +181,18 @@ cd frontend; npm run dev            # :5173 (별도 PowerShell 창)
 | 디스크 | 200GB | 500GB+ (모델 150GB + 산출물) |
 | OS | Ubuntu 22.04 / WSL2 / Windows 10 build 19044+ / Windows 11 | 최신 |
 | 드라이버 | NVIDIA 570+ (CUDA 13 호환) | 595.79 검증됨 |
+
+### Apple Silicon (macOS)
+
+| 항목 | 최소 | 권장 (Wan 2.2 영상 포함 풀 파이프라인) |
+|---|---|---|
+| Chip | M2 Pro | M3/M4/M5 Pro·Max |
+| Unified RAM | 32GB | 64GB+ (128GB 면 여유) |
+| 디스크 | 200GB | 500GB+ |
+| OS | macOS 14 Sonoma | macOS 15 Sequoia 이상 |
+| Xcode CLT | 필수 (`xcode-select --install`) | 최신 |
+
+별도 GPU 드라이버 / VRAM 설정 불필요 — Apple Silicon 의 unified memory 가 자동.
 
 ### WSL2 를 쓰는 경우 (경로 A): 메모리 설정
 
@@ -162,6 +256,27 @@ git --version; ffmpeg -version; node --version; uv --version
 
 `build-essential` / `python3-dev` 에 해당하는 네이티브 컴파일 툴은 대부분의 경우 불필요 — 이 리포의 파이썬 의존성은 모두 wheel 로 배포됨. 만약 sageattention 이 wheel 로 설치되지 않으면 [Section 4](#4-의존성-설치) 트러블슈팅 참고.
 
+### 경로 C (macOS) — Homebrew
+
+```bash
+# Homebrew 미설치라면
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# Apple Silicon: brew prefix 가 /opt/homebrew. 첫 설치 후 PATH 등록 한 번:
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# 시스템 도구
+xcode-select --install                    # git, clang, make
+brew install git git-lfs ffmpeg aria2 node uv
+```
+
+선택: 한글 폰트 (자막용 — `AppleSDGothicNeo` 가 기본 시스템 폰트로 있긴 함):
+```bash
+brew tap homebrew/cask-fonts
+brew install --cask font-nanum-gothic
+```
+
+`setup.sh` 실행하면 누락된 ffmpeg/aria2 는 자동으로 `brew install` 됨 — 위 단계는 미리 받아두면 setup 이 빨라지는 정도.
+
 ### uv 설치 (파이썬 환경 매니저, 공통)
 
 이 리포는 **uv** 기반이다. pip 직접 호출 금지.
@@ -180,6 +295,11 @@ irm https://astral.sh/uv/install.ps1 | iex
 uv --version              # 0.10.x 이상
 ```
 
+C. macOS: 위 `brew install uv` 가 처리. 또는:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 ### Node.js (프론트엔드용)
 
 A. Linux / WSL2:
@@ -191,6 +311,11 @@ node --version            # v20.x
 
 B. Windows: 위 `winget install OpenJS.NodeJS.LTS` 가 처리. 버전 확인만:
 ```powershell
+node --version            # v20.x
+```
+
+C. macOS: 위 `brew install node` 가 처리. 버전 확인만:
+```bash
 node --version            # v20.x
 ```
 
@@ -213,6 +338,14 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 > 윈도우 경로 길이 제한 주의: `C:\myaniform\...` 처럼 **짧은 경로**에 둘 것. `C:\Users\<이름>\OneDrive\...` 같은 깊은 경로는 ComfyUI 커스텀 노드 일부에서 260자 제한 에러 발생 가능. 필요 시 `git config --system core.longpaths true` 설정.
+
+C. macOS:
+```bash
+git clone https://github.com/hobi2k/myaniform.git
+cd myaniform
+```
+
+> iCloud Drive 동기화 폴더 안에 두면 모델/산출물 (~150GB+) 이 클라우드 업로드 큐에 쏠려 디스크가 가득 찰 수 있음. `~/Documents` 가 iCloud 동기화 중이면 `~/Code/myaniform` 처럼 동기화 밖 경로 권장.
 
 리포에 **이미 포함**된 것:
 - `ComfyUI/` — Comfy 본체 코드 (버전 0.19.0 스냅샷)
@@ -304,18 +437,21 @@ $env:MYANIFORM_SKIP_MODEL_DOWNLOAD='1'; .\setup.ps1
 | `HF_TOKEN` | Qwen3-TTS (gated) | huggingface.co → Settings → Access Tokens → Read |
 | `CIVITAI_TOKEN` | Dasiwa Illustrious SDXL, SmoothMix, DaSiWa S2V FastFidelity | civitai.com → Settings → API Keys |
 
-A. Linux / WSL2:
+**권장 — `.env` 한 파일 (Linux / macOS / Windows 공통):**
+
 ```bash
-echo "hf_xxx..."     > .hf_token
-echo "xxxxxxxx..."   > .civitai_token
-# (.gitignore 에 이미 등록됨)
+cp .env.example .env
+$EDITOR .env       # HF_TOKEN=, CIVITAI_TOKEN= 채우기
 ```
 
-B. Windows (PowerShell — 줄바꿈이 추가되지 않도록 `Set-Content` 사용):
 ```powershell
-'hf_xxx...'   | Set-Content -NoNewline .hf_token
-'xxxxxxxx...' | Set-Content -NoNewline .civitai_token
+Copy-Item .env.example .env
+notepad .env       # HF_TOKEN=, CIVITAI_TOKEN= 채우기
 ```
+
+`setup.sh` / `run.sh` / `download_models.sh` (와 PowerShell 카운터파트) 가 시작 시 자동으로 `.env` 를 source. `.env` 는 `.gitignore` 에 등록되어 commit 안 됨. 백엔드 (FastAPI) 도 `run.sh` 가 export 한 셸에서 띄우므로 `os.getenv("KEY")` 로 그대로 읽힘.
+
+**Backwards-compat (이미 사용 중인 경우)**: 기존 `.hf_token` / `.civitai_token` 단일파일도 여전히 인식 — `.env` 가 토큰을 안 가지고 있을 때만 fallback. 점진적 마이그레이션 가능.
 
 토큰 없이도 일부 공개 모델은 받아지지만, 현재 필수 경로에는 Civitai 모델과 gated 모델이 포함된다. 토큰이 없으면 setup/download 가 실패로 끝나며 누락 항목을 요약한다.
 
@@ -375,6 +511,42 @@ B. Windows (PowerShell):
 ```
 
 각 카테고리에서 필수 파일을 체크. 누락된 것은 `[MISS]` 로 표시 — 해당 경로에 수동 배치 후 재실행.
+
+C. macOS:
+```bash
+bash check_models.sh
+```
+
+### 고급 — 기존 LoRA 재사용 (옵션, 대부분 무시)
+
+다른 ComfyUI 설치본 (StabilityMatrix, A1111, Forge 등) 에 이미 받아둔 detailer/Wan LoRA 가 있으면 다시 받지 않고 심볼릭링크로 가져올 수 있다. **일반 사용자는 이 절을 건너뛰면 됨** — `setup.sh` 가 알아서 HF/Civitai 에서 받음.
+
+조건: 외부 디렉토리가 다음 구조여야 함:
+```
+$MYANIFORM_LORA_FALLBACK/
+  detailer/
+    add-detail-xl.safetensors
+    AddMicroDetails_Illustrious_v5.safetensors
+    XDetail_heavy.safetensors
+    ...
+  wan_smoothmix/
+    smoothMixWan2214BI2V_i2vHigh.safetensors
+    smoothMixWan22I2VT2V_i2vHigh.safetensors
+```
+
+설정:
+```bash
+# Linux / WSL2 / macOS
+export MYANIFORM_LORA_FALLBACK="$HOME/Models/Stable-Diffusion-LoRAs"
+bash download_models.sh
+```
+```powershell
+# Windows
+$env:MYANIFORM_LORA_FALLBACK = "D:\Path\To\Your\loras"
+.\download_models.ps1
+```
+
+매칭 파일은 외부 경로로 심볼릭링크 (디스크 절약), 매칭 안 되는 항목은 평소대로 다운로드. 환경변수 미설정이 기본 — 신경 안 써도 됨.
 
 ---
 

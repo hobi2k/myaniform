@@ -14,6 +14,24 @@ $ErrorActionPreference = "Stop"
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ROOT
 
+# .env 로드 — bash setup.sh 와 동일 패턴 (이미 export 된 값 보존).
+function Import-Dotenv {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith('#')) { return }
+        $eq = $line.IndexOf('=')
+        if ($eq -le 0) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if (-not [Environment]::GetEnvironmentVariable($name)) {
+            Set-Item -Path "Env:$name" -Value $value
+        }
+    }
+}
+Import-Dotenv (Join-Path $ROOT ".env")
+
 Write-Host "================================================================="
 Write-Host "  myaniform 의존성 설치 (Windows)"
 Write-Host "================================================================="

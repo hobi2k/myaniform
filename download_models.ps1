@@ -19,11 +19,36 @@ $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $MODELS = Join-Path $ROOT "ComfyUI\models"
 $script:FAILED = New-Object System.Collections.ArrayList
 
-# Civitai 토큰 로드
+# .env 로드 (단일 source). bash 의 `set -a; . .env; set +a` 와 동등.
+# 셸에 이미 export 된 값은 보존.
+function Import-Dotenv {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith('#')) { return }
+        $eq = $line.IndexOf('=')
+        if ($eq -le 0) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if (-not [Environment]::GetEnvironmentVariable($name)) {
+            [Environment]::SetEnvironmentVariable($name, $value)
+            Set-Item -Path "Env:$name" -Value $value
+        }
+    }
+}
+Import-Dotenv (Join-Path $ROOT ".env")
+
+# 외장 LoRA fallback (고급 옵션 — 미설정이 기본).
+# 다른 ComfyUI 설치본에 이미 받아둔 LoRA 디렉토리를 재사용하고 싶을 때만 사용.
+# 미설정 (기본): 모든 LoRA 를 HF/Civitai 에서 새로 다운로드.
+# 자세한 사용법은 docs/install.md "고급 — 기존 LoRA 재사용" 절 참고.
+$LORA_FALLBACK_ROOT = if ($env:MYANIFORM_LORA_FALLBACK) { $env:MYANIFORM_LORA_FALLBACK } else { $null }
+
+# Backwards-compat: 기존 단일토큰 파일도 인식 (.env 가 토큰을 안 가지고 있을 때만).
 if (-not $env:CIVITAI_TOKEN -and (Test-Path "$ROOT\.civitai_token")) {
     $env:CIVITAI_TOKEN = (Get-Content "$ROOT\.civitai_token" -Raw).Trim()
 }
-# HuggingFace 토큰 로드
 if (-not $env:HF_TOKEN -and (Test-Path "$ROOT\.hf_token")) {
     $env:HF_TOKEN = (Get-Content "$ROOT\.hf_token" -Raw).Trim()
 }
@@ -434,7 +459,8 @@ function Download-Civitai {
     Hf-Download "Kijai/WanVideo_comfy" `
         "lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" `
         "$MODELS\loras\wan_smoothmix"
-    $SM_WAN = "D:\Stable Diffusion\StabilityMatrix-win-x64\Data\Packages\ComfyUI\models\loras\wan_smoothmix"
+    # 외부 fallback: $env:MYANIFORM_LORA_FALLBACK\wan_smoothmix 우선, 없으면 Civitai.
+    $SM_WAN = if ($LORA_FALLBACK_ROOT) { Join-Path $LORA_FALLBACK_ROOT "wan_smoothmix" } else { "__no_fallback__" }
     ExternalOrCivitai-Download "$SM_WAN\smoothMixWan2214BI2V_i2vHigh.safetensors" `
         "" "$MODELS\loras\wan_smoothmix" "smoothMixWan2214BI2V_i2vHigh.safetensors"
     ExternalOrCivitai-Download "$SM_WAN\smoothMixWan22I2VT2V_i2vHigh.safetensors" `
@@ -442,7 +468,8 @@ function Download-Civitai {
 
     Write-Host ""
     Write-Host "--- Detailer / Quality LoRA (외부 우선, Civitai fallback) ---"
-    $SM_DET = "D:\Stable Diffusion\StabilityMatrix-win-x64\Data\Packages\ComfyUI\models\loras\detailer"
+    # 같은 규칙: $env:MYANIFORM_LORA_FALLBACK\detailer 우선, 없으면 Civitai.
+    $SM_DET = if ($LORA_FALLBACK_ROOT) { Join-Path $LORA_FALLBACK_ROOT "detailer" } else { "__no_fallback__" }
     $DET_DIR = "$MODELS\loras\detailer"
     ExternalOrCivitai-Download "$SM_DET\add-detail-xl.safetensors"                "135867"  $DET_DIR "add-detail-xl.safetensors"
     ExternalOrCivitai-Download "$SM_DET\AddMicroDetails_Illustrious_v5.safetensors" "1963644" $DET_DIR "AddMicroDetails_Illustrious_v5.safetensors"

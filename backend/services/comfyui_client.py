@@ -3,16 +3,23 @@
 import base64
 import inspect
 import json
+import os
 import struct
 import uuid
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlparse
 
 import httpx
 import websockets
 
-COMFYUI_URL = "http://127.0.0.1:8188"
-COMFYUI_WS  = "ws://127.0.0.1:8188"
+# ComfyUI URL — env 로 override 가능 (원격 GPU 호스트 가리킬 때).
+# 디폴트: 같은 머신의 8188.
+COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+# WebSocket 은 같은 호스트:포트, scheme 만 ws/wss 로 자동 변환.
+_parsed = urlparse(COMFYUI_URL)
+_ws_scheme = "wss" if _parsed.scheme == "https" else "ws"
+COMFYUI_WS = f"{_ws_scheme}://{_parsed.netloc}"
 OUTPUT_DIR  = Path(__file__).parent.parent.parent / "ComfyUI" / "output"
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
